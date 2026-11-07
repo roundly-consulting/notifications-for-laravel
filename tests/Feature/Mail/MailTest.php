@@ -446,7 +446,7 @@ final class FixedAddress implements ResolvesMailAddress
 {
     public function __construct(private ?string $address) {}
 
-    public function address(Model $recipient, NotificationPayload $payload): ?string
+    public function address(Model $recipient, ?NotificationPayload $payload): ?string
     {
         return $this->address;
     }

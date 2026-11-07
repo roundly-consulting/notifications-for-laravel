@@ -29,7 +29,8 @@ Initial public release.
   mandatory types ignore mutes, muting stops mail only by default, defaults come from the type.
 - Email through Laravel's mail notifications in each recipient's locale, with leading or trailing
   de-dup within the window, minimal mail for sensitive subjects, at-most-once delivery with retries,
-  and an address seam (contacts-for-laravel recipe).
+  and an address seam (`notifications.mail.address_resolver`, the contacts-for-laravel "verified
+  only" recipe) that typed mail and digests both honour.
 - Quiet hours in the user's timezone (urgent types bypass them) and daily or weekly digests of
   low-priority types at a local time, idempotent per user and period.
 - Reminders relative to a date attribute (`Reminder::before('expires_at', 'P60D', 'P30D', 'P7D')`)

@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Actions\Delivery;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
-use ReflectionClass;
-use RoundlyConsulting\Notifications\Contracts\ResolvesMailAddress;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\Channel;
@@ -16,12 +13,12 @@ use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\Priority;
 use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
-use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Support\Access;
 use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\DeliveryPayloads;
 use RoundlyConsulting\Notifications\Support\DeliveryStates;
 use RoundlyConsulting\Notifications\Support\Locales;
+use RoundlyConsulting\Notifications\Support\MailAddresses;
 use RoundlyConsulting\Notifications\Support\MailRenderer;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
@@ -30,7 +27,6 @@ use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Support\QuietHoursClock;
 use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
-use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use Throwable;
 
 /**
@@ -111,7 +107,7 @@ final readonly class DeliverMailAction
 
         try {
             $message = Locales::for($recipient, static fn () => MailRenderer::typed($type, $payload));
-            $address = self::address($recipient, $payload);
+            $address = MailAddresses::resolve($recipient, $payload);
         } catch (Throwable $exception) {
             report($exception);
             DeliveryStates::finish($delivery, DeliveryStatus::Failed, CancelReason::Render);
@@ -147,38 +143,6 @@ final readonly class DeliverMailAction
         }
 
         DeliveryStates::sent($delivery);
-    }
-
-    /**
-     * True: route through the recipient. A string: an explicit address. False: undeliverable.
-     */
-    private static function address(Model $recipient, NotificationPayload $payload): string|bool
-    {
-        $resolver = NotificationsConfig::addressResolver();
-
-        if ($resolver !== null) {
-            if (! class_exists($resolver) || ! is_subclass_of($resolver, ResolvesMailAddress::class) || ! (new ReflectionClass($resolver))->isInstantiable()) {
-                throw InvalidConfigurationException::notAnImplementation('notifications.mail.address_resolver', ResolvesMailAddress::class, $resolver);
-            }
-
-            $instance = app()->make($resolver);
-
-            if (! $instance instanceof ResolvesMailAddress) {
-                throw InvalidConfigurationException::notAnImplementation('notifications.mail.address_resolver', ResolvesMailAddress::class, $resolver);
-            }
-
-            $address = $instance->address($recipient, $payload);
-
-            return $address === null || trim($address) === '' ? false : $address;
-        }
-
-        if (! method_exists($recipient, 'routeNotificationFor')) {
-            return false;
-        }
-
-        $route = $recipient->routeNotificationFor('mail');
-
-        return $route === null || $route === '' || $route === [] ? false : true;
     }
 
     private static function retryOrFail(NotificationDelivery $delivery): void

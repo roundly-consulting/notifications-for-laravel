@@ -14,7 +14,7 @@ use RoundlyConsulting\Notifications\NotificationPayload;
  */
 final class VerifiedEmailResolver implements ResolvesMailAddress
 {
-    public function address(Model $recipient, NotificationPayload $payload): ?string
+    public function address(Model $recipient, ?NotificationPayload $payload): ?string
     {
         if (! $recipient instanceof ContactUser) {
             return null;

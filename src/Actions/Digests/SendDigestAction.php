@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications\Actions\Digests;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
@@ -21,6 +22,7 @@ use RoundlyConsulting\Notifications\Support\DigestEntry;
 use RoundlyConsulting\Notifications\Support\DigestRenderer;
 use RoundlyConsulting\Notifications\Support\DigestRuns;
 use RoundlyConsulting\Notifications\Support\Locales;
+use RoundlyConsulting\Notifications\Support\MailAddresses;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
@@ -31,7 +33,8 @@ use Throwable;
 
 /**
  * Sends one claimed digest run. Every entry is re-checked (access, mutes) and dropped when it no
- * longer passes; a run with nothing left sends no mail. A failed send leaves the run pending for
+ * longer passes; a run with nothing left sends no mail. The address comes from
+ * `notifications.mail.address_resolver` when one is configured, exactly as for typed mail. A failed send leaves the run pending for
  * the next sweep until `notifications.mail.max_attempts`.
  *
  * @internal
@@ -76,14 +79,27 @@ final readonly class SendDigestAction
 
         try {
             $message = Locales::for($recipient, static fn () => DigestRenderer::render($recipient, $run->frequency, $entries));
+            $address = MailAddresses::resolve($recipient, null);
 
-            if (! method_exists($recipient, 'routeNotificationFor') || in_array($recipient->routeNotificationFor('mail'), [null, '', []], true)) {
+            if ($address === false) {
                 DigestRuns::finish($run, DigestRunStatus::Failed, CancelReason::NoAddress);
 
                 return;
             }
 
-            Notification::sendNow($recipient, new DigestMailNotification(ModelRefs::key($run), count($entries), $message));
+            $notification = new DigestMailNotification(ModelRefs::key($run), count($entries), $message);
+
+            if ($address === true) {
+                Notification::sendNow($recipient, $notification);
+            } else {
+                $locale = Locales::preferred($recipient);
+
+                if ($locale !== null) {
+                    $notification->locale($locale);
+                }
+
+                (new AnonymousNotifiable)->route('mail', $address)->notifyNow($notification);
+            }
         } catch (Throwable $exception) {
             report($exception);
             $this->failed($run);
