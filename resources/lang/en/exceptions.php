@@ -10,7 +10,6 @@ return [
     'invalid_type_window' => 'The window of the notification type ":type" must be a positive duration of at most one day.',
     'invalid_type_channels' => 'The notification type ":type" needs at least one channel.',
     'invalid_type_subject' => 'The subject of the notification type ":type" must be an Eloquent model.',
-    'invalid_type_title' => 'The notification type ":type" needs a title.',
     'duplicate_type' => 'The notification type ":type" is registered twice (:first and :second).',
     'invalid_subject' => 'The notification type ":type" is about :expected, not :given.',
     'unexpected_subject' => 'The notification type ":type" has no subject, but :given was given.',
@@ -31,8 +30,6 @@ return [
     'invalid_time' => '":value" is not a time such as 22:00.',
     'invalid_timezone' => '":value" is not a timezone.',
     'invalid_reminder' => 'A reminder of the notification type ":type" is invalid: :reason.',
-    'unknown_reminder_rule' => 'The notification type ":type" has no reminder rule ":rule".',
     'invalid_interop_mapping' => ':notification is mapped to the unknown notification type ":type".',
     'interop_time_critical' => ':notification is time-critical and may only map to an urgent type without a window that is not digestible (":type" is not).',
-    'interop_invalid_entry' => 'The interop entry ":key" is invalid.',
 ];

@@ -19,9 +19,4 @@ final class InvalidInteropMappingException extends NotificationsException
     {
         return self::make('invalid_interop_mapping', 500, ['notification' => $notification, 'type' => $type], 'interop_time_critical');
     }
-
-    public static function invalidEntry(string $key): self
-    {
-        return self::make('invalid_interop_mapping', 500, ['key' => $key], 'interop_invalid_entry');
-    }
 }

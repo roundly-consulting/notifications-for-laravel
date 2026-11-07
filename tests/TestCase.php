@@ -54,6 +54,7 @@ abstract class TestCase extends PackageTestCase
     {
         return [
             'app.name' => 'Roundly',
+            'app.key' => 'base64:'.base64_encode(str_repeat('k', 32)),
             'mail.default' => 'array',
             'queue.default' => 'sync',
             'auth.providers.users.model' => User::class,

@@ -30,7 +30,7 @@ final class InboxQueries
      * The recipient's item, or InboxItemNotFoundException — the same answer for another
      * recipient's item, so the inbox is no existence oracle.
      */
-    public static function find(Model $recipient, InboxItem|int|string $item, bool $lock = false): InboxItem
+    public static function find(Model $recipient, InboxItem|int|string $item): InboxItem
     {
         $id = $item instanceof InboxItem ? ModelRefs::key($item) : $item;
 
@@ -38,13 +38,7 @@ final class InboxQueries
             throw InboxItemNotFoundException::notFound();
         }
 
-        $query = self::for($recipient)->whereKey($id);
-
-        if ($lock) {
-            $query->lockForUpdate();
-        }
-
-        return $query->first() ?? throw InboxItemNotFoundException::notFound();
+        return self::for($recipient)->whereKey($id)->first() ?? throw InboxItemNotFoundException::notFound();
     }
 
     private static function looksLikeAKey(string $id): bool

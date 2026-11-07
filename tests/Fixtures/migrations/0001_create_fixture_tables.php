@@ -52,6 +52,21 @@ return new class extends Migration
             $table->timestamps();
         });
 
+        // Laravel's own database channel table (interop: keep / both).
+        Schema::create('notifications', function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->morphs('notifiable');
+            $table->text('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('guests', function (Blueprint $table): void {
+            $table->id();
+            $table->string('email')->nullable();
+        });
+
         Schema::create('posts', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('author_id');

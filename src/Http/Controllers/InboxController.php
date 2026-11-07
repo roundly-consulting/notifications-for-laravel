@@ -11,6 +11,7 @@ use RoundlyConsulting\Notifications\Http\Requests\InboxIndexRequest;
 use RoundlyConsulting\Notifications\Http\Requests\ReadAllRequest;
 use RoundlyConsulting\Notifications\Http\Resources\InboxCountsResource;
 use RoundlyConsulting\Notifications\Http\Resources\InboxItemResource;
+use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\NotificationsManager;
 
 /**
@@ -57,21 +58,21 @@ final class InboxController extends Controller
 
     public function read(Request $request, string $item): JsonResource|JsonResponse
     {
-        return $this->guarded(function () use ($request, $item): JsonResource {
+        return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
             $inbox->markRead($item);
 
-            return new InboxItemResource($inbox->find($item));
+            return $this->item($inbox->find($item), $request);
         });
     }
 
     public function unread(Request $request, string $item): JsonResource|JsonResponse
     {
-        return $this->guarded(function () use ($request, $item): JsonResource {
+        return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
             $inbox->markUnread($item);
 
-            return new InboxItemResource($inbox->find($item));
+            return $this->item($inbox->find($item), $request);
         });
     }
 
@@ -84,21 +85,21 @@ final class InboxController extends Controller
 
     public function archive(Request $request, string $item): JsonResource|JsonResponse
     {
-        return $this->guarded(function () use ($request, $item): JsonResource {
+        return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
             $inbox->archive($item);
 
-            return new InboxItemResource($inbox->find($item));
+            return $this->item($inbox->find($item), $request);
         });
     }
 
     public function unarchive(Request $request, string $item): JsonResource|JsonResponse
     {
-        return $this->guarded(function () use ($request, $item): JsonResource {
+        return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
             $inbox->unarchive($item);
 
-            return new InboxItemResource($inbox->find($item));
+            return $this->item($inbox->find($item), $request);
         });
     }
 
@@ -118,5 +119,14 @@ final class InboxController extends Controller
 
             return new JsonResponse(['acknowledged' => $acknowledged]);
         });
+    }
+
+    /**
+     * One item, always under `data` — the item's own `data` field would make Laravel's resource
+     * response skip the wrapper.
+     */
+    private function item(InboxItem $item, Request $request): JsonResponse
+    {
+        return new JsonResponse(['data' => (new InboxItemResource($item))->resolve($request)]);
     }
 }

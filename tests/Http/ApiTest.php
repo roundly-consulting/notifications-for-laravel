@@ -1,0 +1,182 @@
+<?php
+
+declare(strict_types=1);
+
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Notifications\Enums\DigestFrequency;
+use RoundlyConsulting\Notifications\Facades\Notifications;
+use RoundlyConsulting\Notifications\Models\InboxItem;
+use RoundlyConsulting\Notifications\Models\NotificationReminder;
+use RoundlyConsulting\Notifications\Recipients;
+use RoundlyConsulting\Notifications\Recipients\UserRecipients;
+
+beforeEach(function (): void {
+    Notification::fake();
+    at('2026-11-09 10:00:00');
+});
+
+it('answers 401 without a user (C-33)', function (string $method, string $uri): void {
+    $this->json($method, '/notifications/'.$uri)->assertUnauthorized();
+})->with([
+    ['GET', 'inbox'],
+    ['GET', 'inbox/counts'],
+    ['POST', 'inbox/1/read'],
+    ['POST', 'inbox/read-all'],
+    ['GET', 'preferences'],
+    ['PATCH', 'preferences'],
+    ['GET', 'types'],
+]);
+
+it('answers 401 even with the auth middleware emptied (C-33)', function (): void {
+    config()->set('notifications.routes.auth_middleware', []);
+
+    $this->getJson('/notifications/inbox')->assertUnauthorized();
+});
+
+it('lists, filters and counts the user\'s inbox', function (): void {
+    $user = user();
+    $request = purchaseRequest();
+    $request->company->addMember($user, 'approver');
+    Notifications::send('request.awaiting_approval', $request, $user, ['reference' => 'PR-1']);
+    Notifications::send('security.alert', null, $user);
+    Notifications::send('security.alert', null, user());
+
+    $this->actingAs($user)->getJson('/notifications/inbox')
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('data.0.type', 'security.alert')
+        ->assertJsonPath('data.1.context.key', 'company:'.$request->company_id)
+        ->assertJsonPath('meta.total', 2);
+
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[context]=company:'.$request->company_id)->assertJsonCount(1, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[category]=security&filter[status]=unread')->assertJsonCount(1, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[type]=security.alert&per_page=1')->assertJsonCount(1, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[status]=archived')->assertJsonCount(0, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[status]=read')->assertJsonCount(0, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[status]=all')->assertJsonCount(2, 'data');
+    $this->actingAs($user)->getJson('/notifications/inbox?filter[status]=nope')->assertUnprocessable();
+
+    $this->actingAs($user)->getJson('/notifications/inbox/counts')
+        ->assertOk()
+        ->assertJsonPath('data.unread', 2)
+        ->assertJsonPath('data.contexts.0.key', 'company:'.$request->company_id);
+});
+
+it('marks read, unread, all read, archives and unarchives — only the user\'s own items (C-32)', function (): void {
+    $user = user();
+    Notifications::send('security.alert', null, [$user, $other = user()]);
+    $mine = InboxItem::query()->where('recipient_id', $user->id)->sole();
+    $theirs = InboxItem::query()->where('recipient_id', $other->id)->sole();
+
+    $this->actingAs($user)->postJson("/notifications/inbox/{$mine->id}/read")->assertOk()->assertJsonPath('data.id', $mine->id);
+    expect($mine->fresh()->read_at)->not->toBeNull();
+
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$mine->id}/read")->assertOk()->assertJsonPath('data.read_at', null);
+    $this->actingAs($user)->postJson('/notifications/inbox/read-all', ['category' => 'security'])->assertOk()->assertJsonPath('marked', 1);
+    $this->actingAs($user)->postJson("/notifications/inbox/{$mine->id}/archive")->assertOk();
+    expect($mine->fresh()->archived_at)->not->toBeNull();
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$mine->id}/archive")->assertOk()->assertJsonPath('data.archived_at', null);
+
+    $this->actingAs($user)->postJson("/notifications/inbox/{$theirs->id}/read")
+        ->assertNotFound()
+        ->assertJsonPath('code', 'inbox_item_not_found');
+    $this->actingAs($user)->postJson('/notifications/inbox/abc/read')->assertNotFound();
+    $this->actingAs($user)->postJson("/notifications/inbox/{$theirs->id}/archive")->assertNotFound();
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$theirs->id}/archive")->assertNotFound();
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$theirs->id}/read")->assertNotFound();
+    expect($theirs->fresh()->read_at)->toBeNull();
+});
+
+it('acknowledges the reminder an item came from', function (): void {
+    $owner = user();
+    $manager = user();
+    $contract = contract(owner: $owner, expiresAt: CarbonImmutable::parse('2027-02-17 10:00:00', 'UTC'));
+    $contract->company->addMember($manager, 'manager');
+
+    at('2026-12-19 10:00:00');
+    Notifications::sweep();
+    $item = InboxItem::query()->sole();
+
+    $this->actingAs($owner)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertOk()->assertJsonPath('acknowledged', 1);
+    expect(NotificationReminder::query()->where('kind', 'escalation')->sole()->cancel_reason?->value)->toBe('acknowledged');
+
+    Notifications::send('security.alert', null, $owner);
+    $plain = InboxItem::query()->where('type', 'security.alert')->sole();
+    $this->actingAs($owner)->postJson("/notifications/inbox/{$plain->id}/acknowledge")->assertOk()->assertJsonPath('acknowledged', 0);
+    $this->actingAs($manager)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertNotFound();
+});
+
+it('shows and updates the user\'s preferences', function (): void {
+    $user = user();
+
+    $this->actingAs($user)->getJson('/notifications/preferences')
+        ->assertOk()
+        ->assertJsonPath('data.digest.frequency.value', 'off')
+        ->assertJsonPath('data.timezone', 'UTC')
+        ->assertJsonPath('data.quiet_hours', null);
+
+    $this->actingAs($user)->patchJson('/notifications/preferences', [
+        'channels' => ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['mail' => '1', 'bogus' => true]],
+        'categories' => ['contracts' => ['mail' => false], 'requests' => ['mail' => true]],
+        'digest' => ['frequency' => 'daily', 'time' => '07:00'],
+        'quiet_hours' => ['start' => '22:00', 'end' => '07:00'],
+        'timezone' => 'Europe/Bratislava',
+    ])->assertOk()
+        ->assertJsonPath('data.digest.frequency.value', 'daily')
+        ->assertJsonPath('data.digest.time', '07:00')
+        ->assertJsonPath('data.quiet_hours.start', '22:00')
+        ->assertJsonPath('data.timezone', 'Europe/Bratislava');
+
+    expect(Notifications::preferences($user)->muted('comment.posted'))->toBeTrue()
+        ->and(Notifications::preferences($user)->muted('contract.expiring'))->toBeTrue()
+        ->and(Notifications::preferences($user)->digestPreference()->frequency)->toBe(DigestFrequency::Daily);
+
+    $this->actingAs($user)->patchJson('/notifications/preferences', ['quiet_hours' => null, 'timezone' => null])->assertOk()
+        ->assertJsonPath('data.quiet_hours', null)
+        ->assertJsonPath('data.timezone', 'UTC');
+
+    $types = $this->actingAs($user)->getJson('/notifications/preferences')->json('data.types');
+    $alert = collect($types)->firstWhere('type.key', 'security.alert');
+
+    expect($alert['channels'][1]['locked'])->toBeTrue()
+        ->and($alert['channels'][1]['locked_reason'])->toBe('This notification is required and cannot be switched off.')
+        ->and(collect($types)->firstWhere('type.key', 'comment.posted')['channels'][0]['locked_reason'])->toBe('Notifications always appear in the app.');
+});
+
+it('refuses to mute a mandatory type over the API with a translated 422', function (): void {
+    app()->setLocale('sk');
+
+    $this->actingAs(user())->patchJson('/notifications/preferences', ['channels' => ['security.alert' => ['mail' => false]]])
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'mandatory_notification')
+        ->assertJsonPath('message', 'Upozornenie „security.alert“ je povinné a nemožno ho vypnúť.');
+});
+
+it('validates the preferences payload', function (array $payload): void {
+    $this->actingAs(user())->patchJson('/notifications/preferences', $payload)->assertUnprocessable();
+})->with([
+    'bad frequency' => [['digest' => ['frequency' => 'hourly']]],
+    'bad time' => [['quiet_hours' => ['start' => '25:00', 'end' => '07:00']]],
+    'bad timezone' => [['timezone' => 'Mars/Base']],
+    'not a bool' => [['channels' => ['comment.posted' => ['mail' => 'maybe']]]],
+    'same quiet times' => [['quiet_hours' => ['start' => '07:00', 'end' => '07:00']]],
+    'unknown type' => [['channels' => ['nope.type' => ['mail' => false]]]],
+]);
+
+it('lists the types for a settings screen', function (): void {
+    $this->actingAs(user())->getJson('/notifications/types')
+        ->assertOk()
+        ->assertJsonCount(5, 'data')
+        ->assertJsonPath('data.0.key', 'security.alert')
+        ->assertJsonPath('data.0.mandatory', true)
+        ->assertJsonPath('data.0.priority.value', 'urgent')
+        ->assertJsonPath('data.0.channels.1.value', 'mail')
+        ->assertJsonPath('data.0.category.key', 'security');
+});
+
+it('names its routes', function (): void {
+    expect(route('notifications.inbox.index'))->toEndWith('/notifications/inbox')
+        ->and(route('notifications.types.index'))->toEndWith('/notifications/types')
+        ->and(Recipients::users())->toBeInstanceOf(UserRecipients::class);
+});

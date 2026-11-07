@@ -10,7 +10,6 @@ return [
     'invalid_type_window' => 'Okno typu upozornenia „:type“ musí byť kladné trvanie najviac jeden deň.',
     'invalid_type_channels' => 'Typ upozornenia „:type“ potrebuje aspoň jeden kanál.',
     'invalid_type_subject' => 'Predmet typu upozornenia „:type“ musí byť model Eloquent.',
-    'invalid_type_title' => 'Typ upozornenia „:type“ potrebuje nadpis.',
     'duplicate_type' => 'Typ upozornenia „:type“ je zaregistrovaný dvakrát (:first a :second).',
     'invalid_subject' => 'Typ upozornenia „:type“ sa týka :expected, nie :given.',
     'unexpected_subject' => 'Typ upozornenia „:type“ nemá predmet, no bol zadaný :given.',
@@ -31,8 +30,6 @@ return [
     'invalid_time' => '„:value“ nie je čas, napríklad 22:00.',
     'invalid_timezone' => '„:value“ nie je časové pásmo.',
     'invalid_reminder' => 'Pripomienka typu upozornenia „:type“ je neplatná: :reason.',
-    'unknown_reminder_rule' => 'Typ upozornenia „:type“ nemá pravidlo pripomienky „:rule“.',
     'invalid_interop_mapping' => ':notification je priradené k neznámemu typu upozornenia „:type“.',
     'interop_time_critical' => ':notification je časovo kritické a môže byť priradené len k naliehavému typu bez okna, ktorý nejde do prehľadu („:type“ taký nie je).',
-    'interop_invalid_entry' => 'Položka interop „:key“ je neplatná.',
 ];

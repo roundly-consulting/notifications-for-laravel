@@ -11,6 +11,7 @@ use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Support\DeliveryStates;
+use RoundlyConsulting\Notifications\Support\InteropGate;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 
 /**
@@ -23,7 +24,8 @@ final readonly class RecordInteropOutcome
     {
         $id = $event->notification->id;
 
-        if ($event->channel !== 'mail' || ! $event->notifiable instanceof Model || ! is_string($id) || $id === '') {
+        // A held mail being released records its own outcome (and retries a failed transport).
+        if (InteropGate::isReleasing() || $event->channel !== 'mail' || ! $event->notifiable instanceof Model || ! is_string($id) || $id === '') {
             return;
         }
 

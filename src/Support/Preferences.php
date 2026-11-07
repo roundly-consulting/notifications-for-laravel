@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications\Support;
 
 use Closure;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +33,9 @@ use Throwable;
  */
 final class Preferences
 {
+    /** @var array<string, Lock> preference locks this process holds until a commit */
+    private static array $held = [];
+
     /**
      * The stored override map: `{types: {key: {channel: bool}}, categories: {cat: {channel: bool}}}`.
      *
@@ -153,41 +157,67 @@ final class Preferences
             throw InvalidNotificationsConfigurationException::invalidMap('notifications.preferences.lock_store', 'a cache store that supports atomic locks');
         }
 
-        $lock = $store->lock('notifications:prefs:'.Keys::digest(ModelRefs::identity($user)), NotificationsConfig::lockSeconds());
-
-        $lock->block(min(NotificationsConfig::lockSeconds(), 5));
-
+        $name = 'notifications:prefs:'.Keys::digest(ModelRefs::identity($user));
         $connection = (new (NotificationModels::inboxItem()))->getConnection();
 
-        try {
-            $result = $connection->transaction(function () use ($option, $user, $mutate, $after): mixed {
-                $instance = $option::for($user);
-                // Drop this request's memo so a value read earlier is never the base of the write.
-                $instance->forgetCachedValue();
+        // Re-entrant within this process: a second write for the same user inside one host
+        // transaction already holds the lock (released after that transaction commits).
+        if (isset(self::$held[$name])) {
+            if ($connection->transactionLevel() > 0) {
+                return $connection->transaction(static fn (): mixed => self::apply($option, $user, $mutate, $after));
+            }
 
-                [$value, $result] = $mutate(self::read($option, $user));
+            // The host transaction that held it rolled back: its release never ran.
+            self::$held[$name]->release();
+            unset(self::$held[$name]);
+        }
 
-                self::options()->withoutAuthorization(function () use ($option, $user, $value): void {
-                    $value === null
-                        ? self::options()->forget($option, $user)
-                        : self::options()->set($option, $value, $user);
-                });
+        $lock = $store->lock($name, NotificationsConfig::lockSeconds());
+        $lock->block(min(NotificationsConfig::lockSeconds(), 5));
+        self::$held[$name] = $lock;
 
-                if ($after !== null) {
-                    $after();
-                }
-
-                return $result;
-            });
-        } catch (Throwable $exception) {
+        $release = static function () use ($lock, $name): void {
+            unset(self::$held[$name]);
             $lock->release();
+        };
+
+        try {
+            $result = $connection->transaction(static fn (): mixed => self::apply($option, $user, $mutate, $after));
+        } catch (Throwable $exception) {
+            $release();
 
             throw $exception;
         }
 
-        $connection->afterCommit(static function () use ($lock): void {
-            $lock->release();
+        $connection->afterCommit($release);
+
+        return $result;
+    }
+
+    /**
+     * @template TResult
+     *
+     * @param  class-string<BaseOption>  $option
+     * @param  Closure(mixed): array{0: mixed, 1: TResult}  $mutate
+     * @param  (Closure(): void)|null  $after
+     * @return TResult
+     */
+    private static function apply(string $option, Model $user, Closure $mutate, ?Closure $after): mixed
+    {
+        // Drop this request's memo so a value read earlier is never the base of the write.
+        $option::for($user)->forgetCachedValue();
+
+        [$value, $result] = $mutate(self::read($option, $user));
+
+        self::options()->withoutAuthorization(static function () use ($option, $user, $value): void {
+            $value === null
+                ? self::options()->forget($option, $user)
+                : self::options()->set($option, $value, $user);
         });
+
+        if ($after !== null) {
+            $after();
+        }
 
         return $result;
     }

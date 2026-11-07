@@ -25,6 +25,8 @@ final class ReminderWriter
     /**
      * @param  array<string, mixed>|null  $recipients
      * @param  array<string, mixed>|null  $data
+     * @param  bool  $keyedByOffset  rule rows: one per offset; ad-hoc rows: one per key (a second
+     *                               remind() with the same key replaces the pending row)
      */
     public static function upsert(
         Model $subject,
@@ -36,9 +38,10 @@ final class ReminderWriter
         CarbonImmutable $due,
         ?array $recipients,
         ?array $data,
+        bool $keyedByOffset = true,
     ): NotificationReminder {
         $class = NotificationModels::reminder();
-        $key = Keys::reminder(ModelRefs::identity($subject), $type, $rule, $offset);
+        $key = Keys::reminder(ModelRefs::identity($subject), $type, $rule, $keyedByOffset ? $offset : null);
 
         return $class::query()->getConnection()->transaction(static function () use ($class, $key, $subject, $type, $rule, $anchor, $offset, $anchorValue, $due, $recipients, $data): NotificationReminder {
             for ($attempt = 1; ; $attempt++) {
@@ -46,6 +49,8 @@ final class ReminderWriter
 
                 if ($existing !== null && $existing->status === ReminderStatus::Pending) {
                     $existing->forceFill([
+                        'anchor' => $anchor,
+                        'offset' => $offset,
                         'due_at' => $due,
                         'anchor_value' => $anchorValue,
                         'recipients' => $recipients,

@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
 use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\Durations;
@@ -55,10 +56,12 @@ final class ReminderRule
 
     /**
      * Who is reminded. Rules without recipients are templates for `schedule($type, to: …)`.
+     *
+     * @param  RecipientSpec|Model|Closure|iterable<mixed>  $recipients
      */
-    public function to(RecipientSpec|Closure $recipients): self
+    public function to(RecipientSpec|Model|Closure|iterable $recipients): self
     {
-        $this->to = $recipients;
+        $this->to = $recipients instanceof Closure ? $recipients : Recipients::from($recipients);
 
         return $this;
     }
@@ -76,9 +79,12 @@ final class ReminderRule
     /**
      * If not acknowledged `after` the reminder went out, notify `to`. Repeat for more levels.
      */
-    public function escalate(CarbonInterval|string $after, RecipientSpec|Closure $to, ?string $type = null): self
+    /**
+     * @param  RecipientSpec|Model|Closure|iterable<mixed>  $to
+     */
+    public function escalate(CarbonInterval|string $after, RecipientSpec|Model|Closure|iterable $to, ?string $type = null): self
     {
-        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? CarbonInterval::seconds(0), $to, $type);
+        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? CarbonInterval::seconds(0), $to instanceof Closure ? $to : Recipients::from($to), $type);
 
         return $this;
     }

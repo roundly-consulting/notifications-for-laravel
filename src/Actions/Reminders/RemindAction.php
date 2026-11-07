@@ -50,7 +50,7 @@ final readonly class RemindAction
 
             $key = 'adhoc:'.$rule->ruleKey();
 
-            return [ReminderWriter::upsert($subject, $type, $key, null, null, null, Clock::utc($rule->at), $stored, $payload)];
+            return [ReminderWriter::upsert($subject, $type, $key, null, null, null, Clock::utc($rule->at), $stored, $payload, keyedByOffset: false)];
         }
 
         if ($rule->attribute === null || $rule->offsets === []) {
@@ -72,7 +72,7 @@ final readonly class RemindAction
 
             $key = 'adhoc:'.($rule->hasExplicitKey() ? $rule->ruleKey() : $rule->attribute.':'.$offset);
 
-            $rows[] = ReminderWriter::upsert($subject, $type, $key, $rule->attribute, $offset, $anchor, ReminderRule::dueAt($anchor, $offset), $stored, $payload);
+            $rows[] = ReminderWriter::upsert($subject, $type, $key, $rule->attribute, $offset, $anchor, ReminderRule::dueAt($anchor, $offset), $stored, $payload, keyedByOffset: false);
         }
 
         return $rows;
