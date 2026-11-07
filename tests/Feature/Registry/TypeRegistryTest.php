@@ -68,7 +68,7 @@ it('validates reminder rules at registration', function (Closure $define, string
     'too many offsets' => [fn () => Notifications::define('r.five')->subject(Post::class)->reminders(Reminder::before('due_at', ...array_map(fn (int $d): string => "P{$d}D", range(1, 26)))), 'between 1 and 25'],
     'bad offset' => [fn () => Notifications::define('r.six')->subject(Post::class)->reminders(Reminder::before('due_at', 'nonsense')), 'positive ISO-8601'],
     'duplicate rule keys' => [fn () => Notifications::define('r.seven')->subject(Post::class)->reminders(Reminder::before('due_at', 'P1D'), Reminder::before('due_at', 'P2D')), 'unique per type'],
-    'zero escalation' => [fn () => Notifications::define('r.eight')->subject(Post::class)->reminders(Reminder::before('due_at', 'P1D')->escalate('nonsense', user())), 'positive delay'],
+    'unreadable escalation' => [fn () => Notifications::define('r.eight')->subject(Post::class)->reminders(Reminder::before('due_at', 'P1D')->escalate('nonsense', user())), 'escalation delay "nonsense" is not a positive delay'],
 ]);
 
 it('accepts two rules on one attribute with explicit keys', function (): void {

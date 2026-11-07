@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Notifications\Exceptions\InvalidReminderRuleException;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
 use RoundlyConsulting\Notifications\Support\Clock;
@@ -78,13 +79,16 @@ final class ReminderRule
 
     /**
      * If not acknowledged `after` the reminder went out, notify `to`. Repeat for more levels.
-     */
-    /**
+     * An unreadable or non-positive delay throws here. Type rules only: an ad-hoc reminder
+     * refuses a rule with an escalation.
+     *
      * @param  RecipientSpec|Model|Closure|iterable<mixed>  $to
+     *
+     * @throws InvalidReminderRuleException
      */
     public function escalate(CarbonInterval|string $after, RecipientSpec|Model|Closure|iterable $to, ?string $type = null): self
     {
-        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? CarbonInterval::seconds(0), $to instanceof Closure ? $to : Recipients::from($to), $type);
+        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? throw InvalidReminderRuleException::invalidDelay($after), $to instanceof Closure ? $to : Recipients::from($to), $type);
 
         return $this;
     }

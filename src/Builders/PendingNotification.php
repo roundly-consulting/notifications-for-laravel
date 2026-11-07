@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Notifications\Context;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
+use RoundlyConsulting\Notifications\Exceptions\InvalidReminderRuleException;
 use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
@@ -105,12 +106,15 @@ final class PendingNotification
 
     /**
      * If the subject is not acknowledged `after` the send, notify `to`. Repeat for more levels.
+     * An unreadable or non-positive delay throws here, never escalates at once.
      *
      * @param  RecipientSpec|Model|iterable<mixed>  $to
+     *
+     * @throws InvalidReminderRuleException
      */
     public function escalate(CarbonInterval|string $after, RecipientSpec|Model|iterable $to, ?string $type = null): self
     {
-        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? CarbonInterval::seconds(0), Recipients::from($to), $type);
+        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? throw InvalidReminderRuleException::invalidDelay($after), Recipients::from($to), $type);
 
         return $this;
     }

@@ -19,7 +19,8 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
 /**
  * An ad-hoc reminder for one subject: relative to one of its dates (re-timed by sync like a rule
  * reminder) or at an absolute instant. A second remind() with the same key replaces the pending
- * row. No condition or escalation: declare a rule on the type for those.
+ * row. An ad-hoc rule takes no condition, escalation or `acknowledgedOnRead()` — they would be
+ * dropped at fire time, so they throw; declare a rule on the type for those.
  */
 final readonly class RemindAction
 {
@@ -38,6 +39,10 @@ final readonly class RemindAction
 
         if ($expected !== null && ! $subject instanceof $expected) {
             throw InvalidNotificationSubjectException::wrongClass($type, class_basename($expected), class_basename($subject));
+        }
+
+        if ($rule->escalations() !== [] || $rule->condition() !== null || $rule->isAcknowledgedOnRead()) {
+            throw InvalidReminderRuleException::invalid($type, 'ad-hoc reminders take no condition, escalation or acknowledgedOnRead — declare them on a type rule');
         }
 
         $stored = $to->toStored();

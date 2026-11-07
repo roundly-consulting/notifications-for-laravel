@@ -30,6 +30,7 @@ return [
     'invalid_time' => '":value" is not a time such as 22:00.',
     'invalid_timezone' => '":value" is not a timezone.',
     'invalid_reminder' => 'A reminder of the notification type ":type" is invalid: :reason.',
+    'invalid_escalation_delay' => 'The escalation delay ":value" is not a positive delay such as P1D or PT4H.',
     'invalid_interop_mapping' => ':notification is mapped to the unknown notification type ":type".',
     'interop_time_critical' => ':notification is time-critical and may only map to an urgent type without a window that is not digestible (":type" is not).',
 ];

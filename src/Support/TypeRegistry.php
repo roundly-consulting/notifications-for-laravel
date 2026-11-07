@@ -239,12 +239,6 @@ final class TypeRegistry
             }
 
             $seen[$ruleKey] = true;
-
-            foreach ($rule->escalations() as $escalation) {
-                if (Durations::seconds($escalation->after) <= 0) {
-                    throw InvalidReminderRuleException::invalid($key, 'an escalation needs a positive delay');
-                }
-            }
         }
     }
 }

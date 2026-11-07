@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
@@ -24,9 +25,11 @@ use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Reminders\Reminder;
+use RoundlyConsulting\Notifications\Reminders\ReminderRule;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Testing\Fixtures\LockRecorder;
 use RoundlyConsulting\Testing\Fixtures\LockRecordingGrammar;
@@ -522,3 +525,50 @@ it('locks the subject\'s active reminders while syncing (C-28)', function (): vo
     expect($locks)->not->toBeEmpty()
         ->and(min(array_column($locks, 'transactionDepth')))->toBeGreaterThanOrEqual(1);
 })->skip(fn (): bool => DriverMatrix::driver() !== 'sqlite', 'the recording grammar is SQLite only');
+
+it('refuses an unreadable or non-positive send-level escalation delay', function (CarbonInterval|string $after): void {
+    $approver = user();
+    $director = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director');
+
+    expect(fn () => Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->escalate(after: $after, to: $director)
+        ->send())->toThrow(InvalidReminderRuleException::class, 'is not a positive delay');
+
+    Notifications::sweep();
+
+    expect(NotificationReminder::query()->count())->toBe(0)
+        ->and(InboxItem::query()->count())->toBe(0);
+    Notification::assertNotSentTo($director, TypedMailNotification::class);
+})->with([
+    'unreadable' => ['two days'],
+    'negative' => ['-P1D'],
+    'zero' => ['PT0S'],
+    'zero interval' => [fn (): CarbonInterval => CarbonInterval::seconds(0)],
+]);
+
+it('refuses an unreadable escalation delay on a reminder rule at build time', function (): void {
+    expect(fn () => Reminder::before('expires_at', 'P1D')->escalate('soonish', user()))
+        ->toThrow(InvalidReminderRuleException::class, 'The escalation delay "soonish" is not a positive delay');
+
+    app()->setLocale('sk');
+
+    expect(fn () => Reminder::before('expires_at', 'P1D')->escalate(CarbonInterval::seconds(0), user()))
+        ->toThrow(InvalidReminderRuleException::class, 'Oneskorenie eskalácie „PT0S“ nie je kladné trvanie');
+});
+
+it('refuses an ad-hoc reminder with an escalation, a condition or acknowledgedOnRead', function (Closure $rule): void {
+    $contract = contract();
+    $manager = user();
+    $contract->company->addMember($manager, 'manager');
+
+    expect(fn () => Notifications::for($contract)->remind('contract.expiring', $rule($manager), to: $contract->owner))
+        ->toThrow(InvalidReminderRuleException::class, 'ad-hoc reminders take no condition, escalation or acknowledgedOnRead');
+
+    expect(NotificationReminder::query()->where('rule', 'like', 'adhoc:%')->count())->toBe(0);
+})->with([
+    'escalation' => [fn (User $manager): ReminderRule => Reminder::at(now()->addHour())->escalate('PT1H', $manager)],
+    'condition' => [fn (): ReminderRule => Reminder::before('expires_at', 'P1D')->while(fn (): bool => true)],
+    'acknowledged on read' => [fn (): ReminderRule => Reminder::at(now()->addHour())->acknowledgedOnRead()],
+]);

@@ -35,7 +35,10 @@ Initial public release.
   low-priority types at a local time, idempotent per user and period.
 - Reminders relative to a date attribute (`Reminder::before('expires_at', 'P60D', 'P30D', 'P7D')`)
   that follow the date, stop on delete or a failed condition, re-arm on renewal, and escalate when
-  not acknowledged; ad-hoc reminders with `Notifications::for($subject)->remind()`.
+  not acknowledged; ad-hoc reminders with `Notifications::for($subject)->remind()`. An unreadable or
+  non-positive escalation delay throws `InvalidReminderRuleException` where it is declared, and an
+  ad-hoc reminder refuses a condition, an escalation or `acknowledgedOnRead()` (declare those on a
+  type rule).
 - Interop: map other packages' notification classes to your types (`notifications.interop.map`)
   so preferences, mandatory flags, de-dup, quiet hours and the inbox apply, or suppress them.
 - A Laravel `inbox` channel, an opt-in JSON API (`notifications.routes.enabled`), the
