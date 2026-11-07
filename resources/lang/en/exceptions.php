@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 return [
     'unknown_type' => 'The notification type ":type" is not registered.',
+    'unknown_notification_category' => 'The notification category ":category" is not used by any registered type.',
     'invalid_type_key' => 'The notification type key ":type" is invalid: use lowercase letters, digits and underscores, separated by dots, at most 100 characters.',
     'invalid_type_category' => 'The category ":category" of the notification type ":type" is invalid.',
     'invalid_type_digestible' => 'The notification type ":type" is digestible but not low priority.',

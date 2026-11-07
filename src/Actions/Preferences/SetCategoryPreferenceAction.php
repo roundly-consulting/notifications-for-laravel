@@ -8,21 +8,32 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Events\NotificationPreferenceChanged;
+use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationCategoryException;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Support\Preferences;
+use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
- * Sets or clears a channel for a whole category. Mandatory types in it still deliver.
+ * Sets or clears a channel for a whole category. Mandatory types in it still deliver. A category
+ * no registered type uses throws.
  */
 final readonly class SetCategoryPreferenceAction
 {
+    public function __construct(
+        private TypeRegistry $types,
+    ) {}
+
     /**
      * @param  list<Channel>  $channels
      */
     public function execute(Model $user, string $category, array $channels, ?bool $enabled): void
     {
-        [$old, $new] = Preferences::write(ChannelPreferences::class, $user, static function (mixed $current) use ($category, $channels, $enabled): array {
-            $map = Preferences::normaliseMap($current);
+        if (! $this->types->hasCategory($category)) {
+            throw UnknownNotificationCategoryException::forCategory($category);
+        }
+
+        [$old, $new] = Preferences::write(ChannelPreferences::class, $user, function (mixed $current) use ($category, $channels, $enabled): array {
+            $map = Preferences::cleanMap($current, $this->types);
             $old = $map['categories'][$category] ?? [];
 
             foreach ($channels as $channel) {

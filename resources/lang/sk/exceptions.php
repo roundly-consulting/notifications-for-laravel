@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 return [
+    'unknown_notification_category' => 'Kategóriu upozornení „:category“ nepoužíva žiadny registrovaný typ.',
     'unknown_type' => 'Typ upozornenia „:type“ nie je zaregistrovaný.',
     'invalid_type_key' => 'Kľúč typu upozornenia „:type“ je neplatný: použite malé písmená, číslice a podčiarkovníky oddelené bodkami, najviac 100 znakov.',
     'invalid_type_category' => 'Kategória „:category“ typu upozornenia „:type“ je neplatná.',

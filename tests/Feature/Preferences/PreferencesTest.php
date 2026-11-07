@@ -20,8 +20,10 @@ use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationsConfiguration
 use RoundlyConsulting\Notifications\Exceptions\InvalidQuietHoursException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidTimezoneException;
 use RoundlyConsulting\Notifications\Exceptions\MandatoryNotificationException;
+use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationCategoryException;
 use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationTypeException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
+use RoundlyConsulting\Notifications\Handles\PreferencesHandle;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Support\Preferences;
@@ -120,6 +122,48 @@ it('drops overrides of unregistered types on the next write', function (): void 
     Notifications::preferences($user)->mute('comment.posted');
 
     expect(Preferences::channelMap($user)['types'])->toBe(['comment.posted' => ['mail' => false]]);
+});
+
+it('refuses muting an unknown category', function (Closure $write): void {
+    $user = user();
+
+    expect(fn () => $write(Notifications::preferences($user)))
+        ->toThrow(UnknownNotificationCategoryException::class, 'The notification category "requestz" is not used by any registered type.');
+
+    expect(Preferences::channelMap($user)['categories'])->toBe([]);
+
+    try {
+        $write(Notifications::preferences($user));
+    } catch (UnknownNotificationCategoryException $exception) {
+        expect($exception->errorCode())->toBe('unknown_notification_category')
+            ->and($exception->status())->toBe(422);
+    }
+
+    app()->setLocale('sk');
+    expect(fn () => $write(Notifications::preferences($user)))
+        ->toThrow(UnknownNotificationCategoryException::class, 'Kategóriu upozornení „requestz“ nepoužíva žiadny registrovaný typ.');
+})->with([
+    'mute' => [fn (PreferencesHandle $preferences) => $preferences->muteCategory('requestz')],
+    'mute one channel' => [fn (PreferencesHandle $preferences) => $preferences->muteCategory('requestz', Channel::Mail)],
+    'unmute' => [fn (PreferencesHandle $preferences) => $preferences->unmuteCategory('requestz')],
+]);
+
+it('drops stored overrides of categories no registered type uses', function (): void {
+    $user = user();
+    Options::set(ChannelPreferences::class, [
+        'types' => ['gone.type' => ['mail' => false]],
+        'categories' => ['gone_category' => ['mail' => false], 'comments' => ['mail' => false]],
+    ], $user);
+
+    Notifications::preferences($user)->muteCategory('requests');
+
+    expect(Preferences::channelMap($user)['categories'])->toBe(['comments' => ['mail' => false], 'requests' => ['mail' => false]])
+        ->and(Preferences::channelMap($user)['types'])->toBe([]);
+
+    Options::set(ChannelPreferences::class, ['types' => [], 'categories' => ['gone_category' => ['mail' => false]]], $user);
+    Notifications::preferences($user)->mute('comment.posted');
+
+    expect(Preferences::channelMap($user))->toBe(['types' => ['comment.posted' => ['mail' => false]], 'categories' => []]);
 });
 
 it('resets every override to the type defaults', function (): void {

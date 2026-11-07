@@ -35,7 +35,7 @@ final readonly class SetChannelPreferenceAction
         }
 
         [$old, $new] = Preferences::write(ChannelPreferences::class, $user, function (mixed $current) use ($type, $channels, $enabled): array {
-            $map = $this->clean(Preferences::normaliseMap($current));
+            $map = Preferences::cleanMap($current, $this->types);
             $old = $map['types'][$type] ?? [];
 
             foreach ($channels as $channel) {
@@ -54,22 +54,5 @@ final readonly class SetChannelPreferenceAction
         });
 
         Event::dispatch(new NotificationPreferenceChanged($user, 'type', [$type => $old], [$type => $new]));
-    }
-
-    /**
-     * Drops overrides of types that are no longer registered.
-     *
-     * @param  array{types: array<string, array<string, bool>>, categories: array<string, array<string, bool>>}  $map
-     * @return array{types: array<string, array<string, bool>>, categories: array<string, array<string, bool>>}
-     */
-    private function clean(array $map): array
-    {
-        foreach (array_keys($map['types']) as $key) {
-            if (! $this->types->has($key)) {
-                unset($map['types'][$key]);
-            }
-        }
-
-        return $map;
     }
 }

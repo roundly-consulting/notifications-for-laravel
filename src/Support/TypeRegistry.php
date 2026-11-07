@@ -89,6 +89,20 @@ final class TypeRegistry
     }
 
     /**
+     * Whether a registered type uses the category.
+     */
+    public function hasCategory(string $category): bool
+    {
+        foreach ($this->all() as $type) {
+            if ($type->category() === $category) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @return list<NotificationType>
      */
     public function all(): array

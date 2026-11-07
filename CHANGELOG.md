@@ -27,6 +27,9 @@ Initial public release.
   context resources swappable through `notifications.resources.*`).
 - Per-user preferences per type, category and channel, stored through options-for-laravel:
   mandatory types ignore mutes, muting stops mail only by default, defaults come from the type.
+  An unknown type or category is refused (`UnknownNotificationTypeException`,
+  `UnknownNotificationCategoryException`), and overrides of types or categories that are no longer
+  registered are dropped on the next write.
 - Email through Laravel's mail notifications in each recipient's locale, with leading or trailing
   de-dup within the window, minimal mail for sensitive subjects, at-most-once delivery with retries,
   and an address seam (`notifications.mail.address_resolver`, the contacts-for-laravel "verified

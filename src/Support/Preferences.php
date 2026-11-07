@@ -231,6 +231,31 @@ final class Preferences
     }
 
     /**
+     * The stored map without overrides of unregistered types or of categories no registered type
+     * uses — every write of the map cleans it.
+     *
+     * @return array{types: array<string, array<string, bool>>, categories: array<string, array<string, bool>>}
+     */
+    public static function cleanMap(mixed $map, TypeRegistry $types): array
+    {
+        $map = self::normaliseMap($map);
+
+        foreach (array_keys($map['types']) as $key) {
+            if (! $types->has($key)) {
+                unset($map['types'][$key]);
+            }
+        }
+
+        foreach (array_keys($map['categories']) as $category) {
+            if (! $types->hasCategory($category)) {
+                unset($map['categories'][$category]);
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * @return array{types: array<string, array<string, bool>>, categories: array<string, array<string, bool>>}
      */
     public static function normaliseMap(mixed $map): array

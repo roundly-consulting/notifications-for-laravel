@@ -10,6 +10,7 @@ use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\UserRecipients;
+use RoundlyConsulting\Notifications\Support\Preferences;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -200,6 +201,20 @@ it('refuses to mute a mandatory type over the API with a translated 422', functi
         ->assertUnprocessable()
         ->assertJsonPath('code', 'mandatory_notification')
         ->assertJsonPath('message', 'Upozornenie „security.alert“ je povinné a nemožno ho vypnúť.');
+});
+
+it('rejects unknown categories in PATCH /preferences', function (): void {
+    $user = user();
+    $junk = [];
+
+    foreach (range(1, 200) as $i) {
+        $junk["junk_{$i}"] = ['mail' => false];
+    }
+
+    $this->actingAs($user)->patchJson('/notifications/preferences', ['categories' => $junk])
+        ->assertUnprocessable();
+
+    expect(Preferences::channelMap($user)['categories'])->toBe([]);
 });
 
 it('validates the preferences payload', function (array $payload): void {
