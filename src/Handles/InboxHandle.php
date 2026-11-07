@@ -254,15 +254,28 @@ final readonly class InboxHandle
     }
 
     /**
-     * Marks every unread item read (optionally in one context or category); returns how many.
+     * Marks every unread item read within this handle's filters (context, items without one,
+     * category, type, since); returns how many. An explicit `in` or `category` argument replaces
+     * the handle's filter of the same kind.
      */
     public function markAllRead(Model|string|null $in = null, ?string $category = null): int
     {
+        $context = $in ?? $this->context;
+        $withoutContext = $in === null && $this->withoutContext;
+        $category ??= $this->category;
+
         return (int) $this->manager->perform(
             NotificationOperation::MarkAllRead,
             MarkAllInboxItemsReadAction::class,
-            fn (MarkAllInboxItemsReadAction $action): int => $action->execute($this->recipient, $in, $category),
-            ['recipient' => $this->recipient, 'in' => $in, 'category' => $category],
+            fn (MarkAllInboxItemsReadAction $action): int => $action->execute($this->recipient, $context, $category, $this->type, $withoutContext, $this->since),
+            [
+                'recipient' => $this->recipient,
+                'in' => $context,
+                'category' => $category,
+                'type' => $this->type,
+                'withoutContext' => $withoutContext,
+                'since' => $this->since,
+            ],
         );
     }
 

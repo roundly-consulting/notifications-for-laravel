@@ -88,6 +88,20 @@ it('marks read, unread, all read, archives and unarchives — only the user\'s o
     expect($theirs->fresh()->read_at)->toBeNull();
 });
 
+it('marks all read of one type through POST /inbox/read-all', function (): void {
+    $user = user();
+    $request = purchaseRequest();
+    $request->company->addMember($user, 'approver');
+    Notifications::send('request.awaiting_approval', $request, $user, ['reference' => 'PR-1']);
+    Notifications::send('security.alert', null, $user);
+
+    $this->actingAs($user)->postJson('/notifications/inbox/read-all', ['type' => 'security.alert'])->assertOk()->assertJsonPath('marked', 1);
+
+    expect(Notifications::inbox($user)->unreadCount())->toBe(1)
+        ->and(Notifications::inbox($user)->type('request.awaiting_approval')->unreadCount())->toBe(1);
+    $this->actingAs($user)->postJson('/notifications/inbox/read-all', ['type' => str_repeat('x', 101)])->assertUnprocessable();
+});
+
 it('acknowledges the reminder an item came from', function (): void {
     $owner = user();
     $manager = user();

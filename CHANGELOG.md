@@ -19,7 +19,9 @@ Initial public release.
   `members()`, `owner()`, `using()`, `merge()`), idempotency keys and large-set fan-out on the queue.
   Access is re-checked at every hop: send, queued mail, held mail, digest, reminder, escalation.
 - An in-app inbox: one item per recipient, type, subject and context per window (count and latest
-  actor), read/unread/archive/delete, per-context labels and counts, paginated and cursor queries,
+  actor), read/unread/archive/delete, "mark all read" scoped by the inbox handle's filters
+  (`Notifications::inbox($user)->in($company)->markAllRead()`; `POST /inbox/read-all` takes
+  `context`, `category` and `type`), per-context labels and counts, paginated and cursor queries,
   `revoke()`, events for broadcasting, and JSON resources without class names (actor, subject and
   context resources swappable through `notifications.resources.*`).
 - Per-user preferences per type, category and channel, stored through options-for-laravel:

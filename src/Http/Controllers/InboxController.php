@@ -78,7 +78,13 @@ final class InboxController extends Controller
 
     public function readAll(ReadAllRequest $request): JsonResponse
     {
-        $marked = $this->notifications->inbox($this->user($request))->markAllRead($request->context(), $request->category());
+        $inbox = $this->notifications->inbox($this->user($request));
+
+        if (($type = $request->type()) !== null) {
+            $inbox = $inbox->type($type);
+        }
+
+        $marked = $inbox->markAllRead($request->context(), $request->category());
 
         return new JsonResponse(['marked' => $marked]);
     }

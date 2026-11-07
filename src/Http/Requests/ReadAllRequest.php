@@ -7,7 +7,7 @@ namespace RoundlyConsulting\Notifications\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * `POST /inbox/read-all` with an optional `context` and `category`.
+ * `POST /inbox/read-all` with an optional `context`, `category` and `type`.
  */
 final class ReadAllRequest extends FormRequest
 {
@@ -19,6 +19,7 @@ final class ReadAllRequest extends FormRequest
         return [
             'context' => ['sometimes', 'nullable', 'string', 'max:191'],
             'category' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'type' => ['sometimes', 'nullable', 'string', 'max:100'],
         ];
     }
 
@@ -32,6 +33,13 @@ final class ReadAllRequest extends FormRequest
     public function category(): ?string
     {
         $value = $this->validated('category');
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    public function type(): ?string
+    {
+        $value = $this->validated('type');
 
         return is_string($value) && $value !== '' ? $value : null;
     }

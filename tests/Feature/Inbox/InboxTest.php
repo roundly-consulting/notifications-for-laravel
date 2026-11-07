@@ -16,6 +16,7 @@ use RoundlyConsulting\Notifications\Events\InboxItemUpdated;
 use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
+use RoundlyConsulting\Notifications\Handles\InboxHandle;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Recipients;
@@ -365,4 +366,58 @@ it('composes ReceivesNotifications with Laravel\'s Notifiable (C-60)', function 
         ->and($user->notificationPreferences()->muted('security.alert'))->toBeFalse()
         ->and(method_exists($user, 'notifications'))->toBeTrue()
         ->and(method_exists($user, 'notify'))->toBeTrue();
+});
+
+/**
+ * Two companies' requests (contexts) for one approver, plus a context-less security alert an hour later.
+ *
+ * @return array{0: User, 1: PurchaseRequest, 2: PurchaseRequest}
+ */
+function twoContextInbox(): array
+{
+    $approver = user();
+    $a = purchaseRequest(company('A'));
+    $b = purchaseRequest(company('B'), reference: 'PR-2');
+    $a->company->addMember($approver, 'approver');
+    $b->company->addMember($approver, 'approver');
+
+    Notifications::send('request.awaiting_approval', $a, $approver, ['reference' => 'PR-1']);
+    Notifications::send('request.awaiting_approval', $b, $approver, ['reference' => 'PR-2']);
+    at('2026-11-09 11:00:00');
+    Notifications::send('security.alert', null, $approver);
+
+    return [$approver, $a, $b];
+}
+
+it('marks only the filtered context read through in()->markAllRead()', function (): void {
+    [$approver, $a, $b] = twoContextInbox();
+
+    $marked = Notifications::inbox($approver)->in($a->company)->markAllRead();
+
+    expect($marked)->toBe(1)
+        ->and(Notifications::inbox($approver)->in($a->company)->unreadCount())->toBe(0)
+        ->and(Notifications::inbox($approver)->in($b->company)->unreadCount())->toBe(1)
+        ->and(Notifications::inbox($approver)->unreadCount())->toBe(2);
+});
+
+it('honours category(), type(), withoutContext() and since() in markAllRead()', function (Closure $filter, int $marked, int $left): void {
+    [$approver] = twoContextInbox();
+
+    expect($filter(Notifications::inbox($approver))->markAllRead())->toBe($marked)
+        ->and(Notifications::inbox($approver)->unreadCount())->toBe($left);
+})->with([
+    'category' => [fn (InboxHandle $inbox): InboxHandle => $inbox->category('requests'), 2, 1],
+    'type' => [fn (InboxHandle $inbox): InboxHandle => $inbox->type('security.alert'), 1, 2],
+    'without a context' => [fn (InboxHandle $inbox): InboxHandle => $inbox->withoutContext(), 1, 2],
+    'since' => [fn (InboxHandle $inbox): InboxHandle => $inbox->since(now()->subMinutes(30)), 1, 2],
+]);
+
+it('lets an explicit markAllRead(in:) argument override the handle context', function (): void {
+    [$approver, $a, $b] = twoContextInbox();
+
+    expect(Notifications::inbox($approver)->in($a->company)->markAllRead(in: $b->company))->toBe(1)
+        ->and(Notifications::inbox($approver)->in($a->company)->unreadCount())->toBe(1)
+        ->and(Notifications::inbox($approver)->in($b->company)->unreadCount())->toBe(0)
+        ->and(Notifications::inbox($approver)->category('requests')->markAllRead(category: 'security'))->toBe(1)
+        ->and(Notifications::inbox($approver)->unreadCount())->toBe(1);
 });
