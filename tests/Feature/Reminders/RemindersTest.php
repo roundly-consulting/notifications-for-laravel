@@ -27,6 +27,9 @@ use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
+use RoundlyConsulting\Testing\Database\DriverMatrix;
+use RoundlyConsulting\Testing\Fixtures\LockRecorder;
+use RoundlyConsulting\Testing\Fixtures\LockRecordingGrammar;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -486,3 +489,18 @@ it('lists the subject\'s reminders through the trait relation', function (): voi
         ->and($contract->syncNotificationReminders())->toBe(0)
         ->and(app(TypeRegistry::class)->forSubject($contract))->toHaveCount(1);
 });
+
+it('locks the subject\'s active reminders while syncing (C-28)', function (): void {
+    $connection = DB::connection();
+    $connection->setQueryGrammar(new LockRecordingGrammar($connection));
+    LockRecorder::flush();
+    LockRecorder::listenForMarkers();
+
+    $contract = expiringContract();
+    $contract->update(['expires_at' => CarbonImmutable::parse('2027-03-19 10:00:00', 'UTC')]);
+
+    $locks = array_filter(LockRecorder::recorded(), fn (array $lock): bool => str_contains($lock['sql'], 'notification_reminders'));
+
+    expect($locks)->not->toBeEmpty()
+        ->and(min(array_column($locks, 'transactionDepth')))->toBeGreaterThanOrEqual(1);
+})->skip(fn (): bool => DriverMatrix::driver() !== 'sqlite', 'the recording grammar is SQLite only');
