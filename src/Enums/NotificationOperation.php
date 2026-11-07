@@ -23,6 +23,7 @@ enum NotificationOperation: string
     case SetDigest = 'set_digest';
     case SetQuietHours = 'set_quiet_hours';
     case SetTimezone = 'set_timezone';
+    case UpdatePreferences = 'update_preferences';
     case SyncReminders = 'sync_reminders';
     case ScheduleReminders = 'schedule_reminders';
     case Remind = 'remind';

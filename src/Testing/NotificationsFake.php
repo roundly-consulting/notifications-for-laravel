@@ -9,6 +9,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert as PHPUnit;
 use RoundlyConsulting\Notifications\Actions\Sending\ResolveRecipientsAction;
+use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
@@ -166,6 +167,18 @@ final class NotificationsFake extends NotificationsManager
             && $set->context['enabled'] === false);
 
         PHPUnit::assertNotEmpty($matching, sprintf('Expected [%s] to be muted, but it was not.', $type));
+    }
+
+    /**
+     * @param  (Closure(PreferencesUpdate): bool)|null  $where
+     */
+    public function assertPreferencesUpdated(Model $user, ?Closure $where = null): void
+    {
+        $matching = array_filter($this->recorded(NotificationOperation::UpdatePreferences), static fn (RecordedOperation $op): bool => $op->concerns($user, 'user')
+            && $op->context['update'] instanceof PreferencesUpdate
+            && ($where === null || $where($op->context['update'])));
+
+        PHPUnit::assertNotEmpty($matching, 'Expected the user\'s preferences to be updated, but they were not.');
     }
 
     // Reminders --------------------------------------------------------------------------

@@ -17,6 +17,7 @@ return [
     'subject_required' => 'The notification type ":type" needs a subject here.',
     'invalid_data' => 'Notification data must be plain JSON (:path is not).',
     'data_too_large' => 'Notification data is :bytes bytes; at most :max are allowed.',
+    'unknown_channel' => '":channel" is not a notification channel (inbox or mail).',
     'invalid_context' => 'A notification context must be a model or a key without a backslash, at most 191 characters.',
     'invalid_recipient' => 'A recipient must be an Eloquent model, :given given.',
     'unresolvable_recipients' => ':group cannot list its members: implement ProvidesNotificationRecipients or bind a group resolver.',

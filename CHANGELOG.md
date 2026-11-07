@@ -29,7 +29,9 @@ Initial public release.
   mandatory types ignore mutes, muting stops mail only by default, defaults come from the type.
   An unknown type or category is refused (`UnknownNotificationTypeException`,
   `UnknownNotificationCategoryException`), and overrides of types or categories that are no longer
-  registered are dropped on the next write.
+  registered are dropped on the next write. `Notifications::preferences($user)->update(new
+  PreferencesUpdate(...))` applies several changes all or nothing — what `PATCH /preferences` uses,
+  so a refused part answers 422 under its field and writes nothing.
 - Email through Laravel's mail notifications in each recipient's locale, with leading or trailing
   de-dup within the window, minimal mail for sensitive subjects, at-most-once delivery with retries,
   and an address seam (`notifications.mail.address_resolver`, the contacts-for-laravel "verified

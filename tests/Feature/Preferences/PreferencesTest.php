@@ -8,14 +8,19 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Notifications\Actions\Preferences\UpdatePreferencesAction;
 use RoundlyConsulting\Notifications\Contracts\HasNotificationTimezone;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
+use RoundlyConsulting\Notifications\DataTransferObjects\DigestPreferenceData;
+use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
+use RoundlyConsulting\Notifications\DataTransferObjects\QuietHours;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Enums\InboxOutcome;
 use RoundlyConsulting\Notifications\Enums\MailOutcome;
 use RoundlyConsulting\Notifications\Events\NotificationPreferenceChanged;
+use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationsConfigurationException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidQuietHoursException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidTimezoneException;
@@ -25,10 +30,14 @@ use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationTypeException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Handles\PreferencesHandle;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
+use RoundlyConsulting\Notifications\Options\DigestPreference;
+use RoundlyConsulting\Notifications\Options\TimezonePreference;
 use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Options\Facades\Options;
+use RoundlyConsulting\Options\Option;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -164,6 +173,95 @@ it('drops stored overrides of categories no registered type uses', function (): 
     Notifications::preferences($user)->mute('comment.posted');
 
     expect(Preferences::channelMap($user))->toBe(['types' => ['comment.posted' => ['mail' => false]], 'categories' => []]);
+});
+
+function fullPreferencesUpdate(): PreferencesUpdate
+{
+    return new PreferencesUpdate(
+        channels: ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['mail' => true]],
+        categories: ['contracts' => ['mail' => false]],
+        digest: new DigestPreferenceData(DigestFrequency::Daily, '08:00'),
+        setsQuietHours: true,
+        quietHours: new QuietHours('22:00', '07:00'),
+        setsTimezone: true,
+        timezone: 'Europe/Bratislava',
+    );
+}
+
+it('applies a PreferencesUpdate through the facade, DI and the action', function (Closure $update): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    $user = user();
+
+    $update($user, fullPreferencesUpdate());
+
+    expect(Preferences::channelMap($user))->toBe([
+        'types' => ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['mail' => true]],
+        'categories' => ['contracts' => ['mail' => false]],
+    ])
+        ->and(Notifications::preferences($user)->digestPreference()->time)->toBe('08:00')
+        ->and(Notifications::preferences($user)->quietHoursPreference()?->start)->toBe('22:00')
+        ->and(Notifications::preferences($user)->resolvedTimezone())->toBe('Europe/Bratislava');
+
+    foreach (['type', 'category', 'digest', 'quiet_hours', 'timezone'] as $scope) {
+        Event::assertDispatched(NotificationPreferenceChanged::class, fn (NotificationPreferenceChanged $event): bool => $event->scope === $scope && $event->user->is($user));
+    }
+
+    Event::assertDispatched(NotificationPreferenceChanged::class, fn (NotificationPreferenceChanged $event): bool => $event->scope === 'type' && $event->new === ['comment.posted' => ['mail' => false]]);
+
+    $update($user, new PreferencesUpdate(categories: ['contracts' => ['mail' => true]], setsQuietHours: true, setsTimezone: true));
+
+    expect(Preferences::channelMap($user)['categories'])->toBe([])
+        ->and(Preferences::storedQuietHours($user))->toBeNull()
+        ->and(Preferences::timezone($user))->toBeNull()
+        ->and(Notifications::preferences($user)->digestPreference()->frequency)->toBe(DigestFrequency::Daily);
+})->with([
+    'facade' => [fn (Model $user, PreferencesUpdate $update) => Notifications::preferences($user)->update($update)],
+    'dependency injection' => [fn (Model $user, PreferencesUpdate $update) => app(NotificationsManager::class)->preferences($user)->update($update)],
+    'action' => [fn (Model $user, PreferencesUpdate $update) => app(UpdatePreferencesAction::class)->execute($user, $update)],
+]);
+
+it('rolls a PreferencesUpdate back as a whole when one part is invalid', function (PreferencesUpdate $update, string $exception): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    $user = user();
+
+    expect(fn () => Notifications::preferences($user)->update($update))->toThrow($exception);
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []])
+        ->and(Preferences::read(DigestPreference::class, $user))->toBeNull()
+        ->and(Preferences::timezone($user))->toBeNull();
+    Event::assertNotDispatched(NotificationPreferenceChanged::class);
+})->with([
+    'mandatory type' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false], 'security.alert' => ['mail' => false]], setsTimezone: true, timezone: 'Europe/Bratislava'), MandatoryNotificationException::class],
+    'unknown type' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false], 'nope.type' => ['mail' => false]]), UnknownNotificationTypeException::class],
+    'unknown category' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], categories: ['nope' => ['mail' => false]]), UnknownNotificationCategoryException::class],
+    'unknown channel' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false, 'sms' => false]]), InvalidNotificationDataException::class],
+    'unknown category channel' => [new PreferencesUpdate(categories: ['comments' => ['sms' => false]]), InvalidNotificationDataException::class],
+    'bad digest time' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], digest: new DigestPreferenceData(DigestFrequency::Daily, '25:00')), InvalidQuietHoursException::class],
+    'bad quiet hours' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], setsQuietHours: true, quietHours: new QuietHours('07:00', '07:00')), InvalidQuietHoursException::class],
+    'bad quiet hour' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], setsQuietHours: true, quietHours: new QuietHours('07:00', '7pm')), InvalidQuietHoursException::class],
+    'bad timezone' => [new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], digest: new DigestPreferenceData(DigestFrequency::Daily), setsTimezone: true, timezone: 'Mars/Base'), InvalidTimezoneException::class],
+]);
+
+it('rolls back every write of a PreferencesUpdate that fails half way', function (): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    $user = user();
+    Option::saving(function (Option $option): void {
+        if ($option->key === (new TimezonePreference)->key()) {
+            throw new RuntimeException('disk full');
+        }
+    });
+
+    expect(fn () => Notifications::preferences($user)->update(fullPreferencesUpdate()))->toThrow(RuntimeException::class, 'disk full');
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []])
+        ->and(Preferences::read(DigestPreference::class, $user))->toBeNull()
+        ->and(Preferences::storedQuietHours($user))->toBeNull();
+    Event::assertNotDispatched(NotificationPreferenceChanged::class);
+
+    Option::flushEventListeners();
+    Notifications::preferences($user)->mute('comment.posted');
+
+    expect(Notifications::preferences($user)->muted('comment.posted'))->toBeTrue();
 });
 
 it('resets every override to the type defaults', function (): void {

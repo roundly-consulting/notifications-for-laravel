@@ -11,11 +11,13 @@ use RoundlyConsulting\Notifications\Actions\Preferences\SetChannelPreferenceActi
 use RoundlyConsulting\Notifications\Actions\Preferences\SetDigestPreferenceAction;
 use RoundlyConsulting\Notifications\Actions\Preferences\SetNotificationTimezoneAction;
 use RoundlyConsulting\Notifications\Actions\Preferences\SetQuietHoursAction;
+use RoundlyConsulting\Notifications\Actions\Preferences\UpdatePreferencesAction;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
 use RoundlyConsulting\Notifications\DataTransferObjects\ChannelPreference;
 use RoundlyConsulting\Notifications\DataTransferObjects\DigestPreferenceData;
 use RoundlyConsulting\Notifications\DataTransferObjects\PreferenceRow;
 use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesOverview;
+use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\DataTransferObjects\QuietHours;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
@@ -121,6 +123,22 @@ final readonly class PreferencesHandle
             SetNotificationTimezoneAction::class,
             fn (SetNotificationTimezoneAction $action) => $action->execute($this->user, $timezone),
             ['user' => $this->user, 'timezone' => $timezone],
+        );
+
+        return $this;
+    }
+
+    /**
+     * Several changes at once — types, categories, digest, quiet hours, timezone — applied all
+     * together or not at all (an invalid part throws before anything is written).
+     */
+    public function update(PreferencesUpdate $update): self
+    {
+        $this->manager->perform(
+            NotificationOperation::UpdatePreferences,
+            UpdatePreferencesAction::class,
+            fn (UpdatePreferencesAction $action) => $action->execute($this->user, $update),
+            ['user' => $this->user, 'update' => $update],
         );
 
         return $this;

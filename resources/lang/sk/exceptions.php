@@ -17,6 +17,7 @@ return [
     'subject_required' => 'Typ upozornenia „:type“ tu potrebuje predmet.',
     'invalid_data' => 'Údaje upozornenia musia byť obyčajný JSON (:path ním nie je).',
     'data_too_large' => 'Údaje upozornenia majú :bytes bajtov; povolených je najviac :max.',
+    'unknown_channel' => '„:channel“ nie je kanál upozornení (inbox alebo mail).',
     'invalid_context' => 'Kontext upozornenia musí byť model alebo kľúč bez spätnej lomky, najviac 191 znakov.',
     'invalid_recipient' => 'Príjemca musí byť model Eloquent, zadaný bol :given.',
     'unresolvable_recipients' => ':group nevie vymenovať svojich členov: implementujte ProvidesNotificationRecipients alebo zaregistrujte resolver skupín.',

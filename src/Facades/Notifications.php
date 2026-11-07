@@ -38,6 +38,7 @@ use RoundlyConsulting\Notifications\Testing\NotificationsFake;
  * @method static void assertArchived(\Illuminate\Database\Eloquent\Model|null $recipient = null)
  * @method static void assertPreferenceSet(\Illuminate\Database\Eloquent\Model $user, string $type, \RoundlyConsulting\Notifications\Enums\Channel $channel, bool $enabled)
  * @method static void assertMuted(\Illuminate\Database\Eloquent\Model $user, string $type)
+ * @method static void assertPreferencesUpdated(\Illuminate\Database\Eloquent\Model $user, \Closure|null $where = null)
  * @method static void assertRemindersSynced(\Illuminate\Database\Eloquent\Model $subject)
  * @method static void assertReminderScheduled(\Illuminate\Database\Eloquent\Model $subject, string $type)
  * @method static void assertRemindersCancelled(\Illuminate\Database\Eloquent\Model $subject)

@@ -151,6 +151,20 @@ final class Preferences
      */
     public static function write(string $option, Model $user, Closure $mutate, ?Closure $after = null): mixed
     {
+        return self::atomically($user, static fn (): mixed => self::apply($option, $user, $mutate, $after));
+    }
+
+    /**
+     * Runs the callback under the user's preference lock in one transaction: every `write()` it
+     * makes for this user commits together, or none does.
+     *
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $callback
+     * @return TResult
+     */
+    public static function atomically(Model $user, Closure $callback): mixed
+    {
         $store = Cache::store(NotificationsConfig::lockStore())->getStore();
 
         if (! $store instanceof LockProvider) {
@@ -164,7 +178,7 @@ final class Preferences
         // transaction already holds the lock (released after that transaction commits).
         if (isset(self::$held[$name])) {
             if ($connection->transactionLevel() > 0) {
-                return $connection->transaction(static fn (): mixed => self::apply($option, $user, $mutate, $after));
+                return $connection->transaction($callback);
             }
 
             // The host transaction that held it rolled back: its release never ran.
@@ -182,9 +196,14 @@ final class Preferences
         };
 
         try {
-            $result = $connection->transaction(static fn (): mixed => self::apply($option, $user, $mutate, $after));
+            $result = $connection->transaction($callback);
         } catch (Throwable $exception) {
             $release();
+
+            // The rows rolled back, but options' request memo still holds the written values.
+            foreach ([ChannelPreferences::class, DigestPreference::class, QuietHoursPreference::class, TimezonePreference::class] as $option) {
+                $option::for($user)->forgetCachedValue();
+            }
 
             throw $exception;
         }

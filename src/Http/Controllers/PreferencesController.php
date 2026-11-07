@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Notifications\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Http\Requests\UpdatePreferencesRequest;
 use RoundlyConsulting\Notifications\Http\Resources\PreferencesResource;
 use RoundlyConsulting\Notifications\NotificationsManager;
@@ -26,37 +25,13 @@ final class PreferencesController extends Controller
         return new PreferencesResource($this->notifications->preferences($this->user($request))->overview());
     }
 
+    /**
+     * All or nothing: a refused part (422) leaves every setting as it was.
+     */
     public function update(UpdatePreferencesRequest $request): JsonResource|JsonResponse
     {
         return $this->guarded(function () use ($request): JsonResource {
-            $preferences = $this->notifications->preferences($this->user($request));
-
-            foreach ($request->channels() as $type => $channels) {
-                foreach ($channels as $channel => $enabled) {
-                    $preferences->set($type, Channel::from($channel), $enabled);
-                }
-            }
-
-            foreach ($request->categories() as $category => $channels) {
-                foreach ($channels as $channel => $enabled) {
-                    $enabled
-                        ? $preferences->unmuteCategory($category, Channel::from($channel))
-                        : $preferences->muteCategory($category, Channel::from($channel));
-                }
-            }
-
-            if (($digest = $request->digest()) !== null) {
-                $preferences->digest($digest->frequency, $digest->time);
-            }
-
-            if ($request->has('quiet_hours')) {
-                $quiet = $request->quietHours();
-                $preferences->quietHours($quiet?->start, $quiet?->end);
-            }
-
-            if ($request->has('timezone')) {
-                $preferences->timezone($request->timezone());
-            }
+            $preferences = $this->notifications->preferences($this->user($request))->update($request->toUpdate());
 
             return new PreferencesResource($preferences->overview());
         });

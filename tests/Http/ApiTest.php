@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Models\InboxItem;
@@ -167,7 +168,7 @@ it('shows and updates the user\'s preferences', function (): void {
         ->assertJsonPath('data.quiet_hours', null);
 
     $this->actingAs($user)->patchJson('/notifications/preferences', [
-        'channels' => ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['mail' => '1', 'bogus' => true]],
+        'channels' => ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['mail' => '1']],
         'categories' => ['contracts' => ['mail' => false], 'requests' => ['mail' => true]],
         'digest' => ['frequency' => 'daily', 'time' => '07:00'],
         'quiet_hours' => ['start' => '22:00', 'end' => '07:00'],
@@ -197,11 +198,46 @@ it('shows and updates the user\'s preferences', function (): void {
 it('refuses to mute a mandatory type over the API with a translated 422', function (): void {
     app()->setLocale('sk');
 
-    $this->actingAs(user())->patchJson('/notifications/preferences', ['channels' => ['security.alert' => ['mail' => false]]])
+    $response = $this->actingAs(user())->patchJson('/notifications/preferences', ['channels' => ['security.alert' => ['mail' => false]]])
         ->assertUnprocessable()
-        ->assertJsonPath('code', 'mandatory_notification')
         ->assertJsonPath('message', 'Upozornenie „security.alert“ je povinné a nemožno ho vypnúť.');
+
+    expect($response->json('errors'))->toBe(['channels.security.alert.mail' => ['Upozornenie „security.alert“ je povinné a nemožno ho vypnúť.']]);
 });
+
+it('writes nothing when one PATCH /preferences toggle is refused', function (): void {
+    $user = user();
+
+    $response = $this->actingAs($user)->patchJson('/notifications/preferences', [
+        'channels' => [
+            'request.awaiting_approval' => ['mail' => false],
+            'security.alert' => ['mail' => false],
+        ],
+        'categories' => ['comments' => ['mail' => false], 'junk' => ['mail' => false]],
+        'digest' => ['frequency' => 'daily'],
+        'timezone' => 'Europe/Bratislava',
+    ])->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(['channels.security.alert.mail', 'categories.junk'])
+        ->and($response->json('errors')['categories.junk'][0])->toBe('The notification category "junk" is not used by any registered type.')
+        ->and(Notifications::preferences($user)->enabled('request.awaiting_approval', Channel::Mail))->toBeTrue()
+        ->and(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []])
+        ->and(Notifications::preferences($user)->digestPreference()->frequency)->toBe(DigestFrequency::Off)
+        ->and(Notifications::preferences($user)->resolvedTimezone())->toBe('UTC');
+});
+
+it('rejects unknown channel keys and unknown type keys in PATCH /preferences', function (array $payload, string $field): void {
+    $user = user();
+
+    $response = $this->actingAs($user)->patchJson('/notifications/preferences', $payload)->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe([$field])
+        ->and(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+})->with([
+    'unknown channel' => [['channels' => ['comment.posted' => ['mail' => false, 'sms' => false]]], 'channels.comment.posted'],
+    'unknown category channel' => [['categories' => ['comments' => ['push' => false]]], 'categories.comments'],
+    'unknown type' => [['channels' => ['comment.posted' => ['mail' => false], 'nope.type' => ['mail' => false]]], 'channels.nope.type'],
+]);
 
 it('rejects unknown categories in PATCH /preferences', function (): void {
     $user = user();

@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use PHPUnit\Framework\ExpectationFailedException;
 use RoundlyConsulting\Notifications\Actions\Sending\SendNotificationAction;
 use RoundlyConsulting\Notifications\Builders\PendingNotification;
+use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
 use RoundlyConsulting\Notifications\Enums\Channel;
@@ -16,6 +17,7 @@ use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Reminders\Reminder;
+use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Testing\NotificationsFake;
 
 it('pins the facade contract', function (): void {
@@ -171,6 +173,21 @@ describe('the fake', function (): void {
 
         expect(fn () => $fake->assertMuted($user, 'request.awaiting_approval'))->toThrow(ExpectationFailedException::class, 'to be muted')
             ->and(fn () => $fake->assertPreferenceSet($user, 'comment.posted', Channel::Mail, true))->toThrow(ExpectationFailedException::class, 'to be set on');
+    });
+
+    it('records a preferences update, including one through the model trait', function (): void {
+        $fake = Notifications::fake();
+        $user = user();
+        $other = user();
+        $update = new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], setsTimezone: true, timezone: 'Europe/Bratislava');
+
+        $user->notificationPreferences()->update($update);
+
+        $fake->assertPreferencesUpdated($user);
+        $fake->assertPreferencesUpdated($user, fn (PreferencesUpdate $recorded): bool => $recorded->timezone === 'Europe/Bratislava');
+        expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []])
+            ->and(fn () => $fake->assertPreferencesUpdated($other))->toThrow(ExpectationFailedException::class, 'preferences to be updated')
+            ->and(fn () => $fake->assertPreferencesUpdated($user, fn (PreferencesUpdate $recorded): bool => $recorded->setsQuietHours))->toThrow(ExpectationFailedException::class, 'preferences to be updated');
     });
 
     it('records reminder operations, including the trait sync on save', function (): void {
