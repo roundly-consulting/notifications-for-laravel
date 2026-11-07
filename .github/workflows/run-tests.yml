@@ -7,15 +7,13 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        php: [8.4]
-        laravel: [12.*, 13.*]
+        php: ['8.4', '8.5', '8.6']
+        laravel: [13.*]
         stability: [prefer-stable]
         include:
-          - laravel: 12.*
-            testbench: 10.*
           - laravel: 13.*
             testbench: 11.*
 
@@ -30,7 +28,8 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl, fileinfo
-          coverage: xdebug
+          # The coverage gate runs on the floor version; newer PHPs prove compatibility only.
+          coverage: ${{ matrix.php == '8.4' && 'xdebug' || 'none' }}
 
       - name: Install dependencies
         run: |
@@ -41,7 +40,7 @@ jobs:
         run: composer show -D
 
       - name: Execute tests
-        run: vendor/bin/pest --coverage --min=95
+        run: vendor/bin/pest ${{ matrix.php == '8.4' && '--coverage --min=95' || '--ci' }}
 
   # Real engines: locks, unique-violation retries, json and datetime precision differ from sqlite.
   test-pgsql:
