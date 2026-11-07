@@ -7,10 +7,10 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ubuntu-latest]
-        php: ['8.4', '8.5', '8.6']
+        php: [8.4, 8.5, 8.6]
         laravel: [13.*]
         stability: [prefer-stable]
         include:
@@ -28,19 +28,20 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl, fileinfo
-          # The coverage gate runs on the floor version; newer PHPs prove compatibility only.
-          coverage: ${{ matrix.php == '8.4' && 'xdebug' || 'none' }}
+          coverage: xdebug
 
       - name: Install dependencies
         run: |
-          composer require --dev "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          # Laravel's 13.x releases before 13.32 predate PHP 8.6 (their session handlers miss
+          # create_sid()), so a PHP 8.6 job resolves the framework from 13.32.
+          composer require --dev "laravel/framework:${{ matrix.php == 8.6 && '^13.32' || matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
       - name: List Installed Dependencies
         run: composer show -D
 
       - name: Execute tests
-        run: vendor/bin/pest ${{ matrix.php == '8.4' && '--coverage --min=95' || '--ci' }}
+        run: vendor/bin/pest --coverage --min=95
 
   # Real engines: locks, unique-violation retries, json and datetime precision differ from sqlite.
   test-pgsql:
