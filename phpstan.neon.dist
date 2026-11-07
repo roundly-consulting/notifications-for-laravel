@@ -1,8 +1,13 @@
 parameters:
-    level: 7
+    level: max
     paths:
         - src
         - config
+        - database
+        - routes
+        # Host-model traits are analysed only where a class uses them.
+        - tests/Fixtures/App/Models/User.php
+        - tests/Fixtures/App/Models/Contract.php
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config

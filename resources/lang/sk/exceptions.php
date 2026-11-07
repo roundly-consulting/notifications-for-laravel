@@ -1,0 +1,38 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'unknown_type' => 'Typ upozornenia „:type“ nie je zaregistrovaný.',
+    'invalid_type_key' => 'Kľúč typu upozornenia „:type“ je neplatný: použite malé písmená, číslice a podčiarkovníky oddelené bodkami, najviac 100 znakov.',
+    'invalid_type_category' => 'Kategória „:category“ typu upozornenia „:type“ je neplatná.',
+    'invalid_type_digestible' => 'Typ upozornenia „:type“ môže ísť do prehľadu, no nemá nízku prioritu.',
+    'invalid_type_window' => 'Okno typu upozornenia „:type“ musí byť kladné trvanie najviac jeden deň.',
+    'invalid_type_channels' => 'Typ upozornenia „:type“ potrebuje aspoň jeden kanál.',
+    'invalid_type_subject' => 'Predmet typu upozornenia „:type“ musí byť model Eloquent.',
+    'invalid_type_title' => 'Typ upozornenia „:type“ potrebuje nadpis.',
+    'duplicate_type' => 'Typ upozornenia „:type“ je zaregistrovaný dvakrát (:first a :second).',
+    'invalid_subject' => 'Typ upozornenia „:type“ sa týka :expected, nie :given.',
+    'unexpected_subject' => 'Typ upozornenia „:type“ nemá predmet, no bol zadaný :given.',
+    'subject_required' => 'Typ upozornenia „:type“ tu potrebuje predmet.',
+    'invalid_data' => 'Údaje upozornenia musia byť obyčajný JSON (:path ním nie je).',
+    'data_too_large' => 'Údaje upozornenia majú :bytes bajtov; povolených je najviac :max.',
+    'invalid_context' => 'Kontext upozornenia musí byť model alebo kľúč bez spätnej lomky, najviac 191 znakov.',
+    'invalid_recipient' => 'Príjemca musí byť model Eloquent, zadaný bol :given.',
+    'unresolvable_recipients' => ':group nevie vymenovať svojich členov: implementujte ProvidesNotificationRecipients alebo zaregistrujte resolver skupín.',
+    'unstorable_recipients' => 'Príjemcov určených funkciou nemožno uložiť na neskôr.',
+    'unstorable_resolver' => 'Argumenty resolvera príjemcov :resolver musia byť skalárne hodnoty alebo ich zoznamy.',
+    'no_owner' => ':subject neuvádza vlastníka.',
+    'no_owner_subject' => 'Recipients::owner() potrebuje predmet.',
+    'missing_access_check' => 'Typ upozornenia „:type“ overuje oprávnenie „:ability“ na :subject, no :subject nemá politiku a oprávnenie nie je definované.',
+    'mandatory_notification' => 'Upozornenie „:type“ je povinné a nemožno ho vypnúť.',
+    'inbox_item_not_found' => 'Upozornenie sa nenašlo.',
+    'invalid_quiet_hours' => 'Tiché hodiny sa musia začínať a končiť v inom čase.',
+    'invalid_time' => '„:value“ nie je čas, napríklad 22:00.',
+    'invalid_timezone' => '„:value“ nie je časové pásmo.',
+    'invalid_reminder' => 'Pripomienka typu upozornenia „:type“ je neplatná: :reason.',
+    'unknown_reminder_rule' => 'Typ upozornenia „:type“ nemá pravidlo pripomienky „:rule“.',
+    'invalid_interop_mapping' => ':notification je priradené k neznámemu typu upozornenia „:type“.',
+    'interop_time_critical' => ':notification je časovo kritické a môže byť priradené len k naliehavému typu bez okna, ktorý nejde do prehľadu („:type“ taký nie je).',
+    'interop_invalid_entry' => 'Položka interop „:key“ je neplatná.',
+];

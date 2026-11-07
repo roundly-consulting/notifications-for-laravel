@@ -1,0 +1,38 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'unknown_type' => 'The notification type ":type" is not registered.',
+    'invalid_type_key' => 'The notification type key ":type" is invalid: use lowercase letters, digits and underscores, separated by dots, at most 100 characters.',
+    'invalid_type_category' => 'The category ":category" of the notification type ":type" is invalid.',
+    'invalid_type_digestible' => 'The notification type ":type" is digestible but not low priority.',
+    'invalid_type_window' => 'The window of the notification type ":type" must be a positive duration of at most one day.',
+    'invalid_type_channels' => 'The notification type ":type" needs at least one channel.',
+    'invalid_type_subject' => 'The subject of the notification type ":type" must be an Eloquent model.',
+    'invalid_type_title' => 'The notification type ":type" needs a title.',
+    'duplicate_type' => 'The notification type ":type" is registered twice (:first and :second).',
+    'invalid_subject' => 'The notification type ":type" is about :expected, not :given.',
+    'unexpected_subject' => 'The notification type ":type" has no subject, but :given was given.',
+    'subject_required' => 'The notification type ":type" needs a subject here.',
+    'invalid_data' => 'Notification data must be plain JSON (:path is not).',
+    'data_too_large' => 'Notification data is :bytes bytes; at most :max are allowed.',
+    'invalid_context' => 'A notification context must be a model or a key without a backslash, at most 191 characters.',
+    'invalid_recipient' => 'A recipient must be an Eloquent model, :given given.',
+    'unresolvable_recipients' => ':group cannot list its members: implement ProvidesNotificationRecipients or bind a group resolver.',
+    'unstorable_recipients' => 'Recipients defined by a closure cannot be stored for later.',
+    'unstorable_resolver' => 'The arguments of the recipient resolver :resolver must be scalars or lists of them.',
+    'no_owner' => ':subject does not name an owner.',
+    'no_owner_subject' => 'Recipients::owner() needs a subject.',
+    'missing_access_check' => 'The notification type ":type" checks the ":ability" ability on :subject, but :subject has no policy and the ability is not defined.',
+    'mandatory_notification' => 'The notification ":type" is required and cannot be switched off.',
+    'inbox_item_not_found' => 'The notification was not found.',
+    'invalid_quiet_hours' => 'Quiet hours must start and end at different times.',
+    'invalid_time' => '":value" is not a time such as 22:00.',
+    'invalid_timezone' => '":value" is not a timezone.',
+    'invalid_reminder' => 'A reminder of the notification type ":type" is invalid: :reason.',
+    'unknown_reminder_rule' => 'The notification type ":type" has no reminder rule ":rule".',
+    'invalid_interop_mapping' => ':notification is mapped to the unknown notification type ":type".',
+    'interop_time_critical' => ':notification is time-critical and may only map to an urgent type without a window that is not digestible (":type" is not).',
+    'interop_invalid_entry' => 'The interop entry ":key" is invalid.',
+];
