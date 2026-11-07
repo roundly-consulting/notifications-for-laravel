@@ -6,7 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
-Initial public release.
+Initial public release. Requires PHP 8.4 or newer (tested on 8.4, 8.5 and 8.6) and Laravel 13, on
+the roundly 2.x companions (crypto, enums, options, package-toolkit).
 
 ### Added
 
