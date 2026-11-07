@@ -27,6 +27,7 @@ use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PlainAccount;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
@@ -308,13 +309,7 @@ it('makes a recipient without an address undeliverable, never a fatal', function
 });
 
 it('makes a recipient that cannot route mail undeliverable', function (): void {
-    $plain = new class extends Model
-    {
-        protected $table = 'users';
-
-        protected $guarded = [];
-    };
-    $plain->forceFill(['name' => 'Plain'])->save();
+    $plain = PlainAccount::query()->create(['name' => 'Plain']);
 
     Notifications::send('security.alert', null, $plain);
 

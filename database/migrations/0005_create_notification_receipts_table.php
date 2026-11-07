@@ -13,12 +13,19 @@ return new class extends Migration
     public function up(): void
     {
         // An idempotency ledger: no soft deletes (pruned after notifications.idempotency.ttl).
-        Schema::create(NotificationsConfig::table('receipts'), function (Blueprint $blueprint): void {
-            match (NotificationsConfig::primaryKeyType()) {
+        $primary = NotificationsConfig::primaryKeyType();
+
+        Schema::create(NotificationsConfig::table('receipts'), function (Blueprint $blueprint) use ($primary): void {
+            match ($primary) {
                 KeyType::BigInt => $blueprint->id(),
-                KeyType::Uuid => $blueprint->uuid('id')->primary(),
-                KeyType::Ulid => $blueprint->ulid('id')->primary(),
+                KeyType::Uuid => $blueprint->uuid('id'),
+                KeyType::Ulid => $blueprint->ulid('id'),
             };
+
+            // Explicit, so the key exists before any foreign key (incl. a self-reference) points at it.
+            if ($primary !== KeyType::BigInt) {
+                $blueprint->primary('id');
+            }
 
             $blueprint->string('key', 64);
             $blueprint->morphKey('recipient', NotificationsConfig::keyType(), false);

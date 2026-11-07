@@ -6,8 +6,10 @@ namespace RoundlyConsulting\Notifications\Support;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Models\InboxItem;
+use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 
 /**
  * Inbox queries scoped to one recipient — the inbox's security boundary.
@@ -41,9 +43,16 @@ final class InboxQueries
         return self::for($recipient)->whereKey($id)->first() ?? throw InboxItemNotFoundException::notFound();
     }
 
+    /**
+     * A string id of the configured key type — anything else is "not found" before it reaches
+     * SQL (PostgreSQL answers a malformed uuid with an error, not an empty result).
+     */
     private static function looksLikeAKey(string $id): bool
     {
-        return preg_match('/^[0-9A-Za-z-]{1,64}$/', $id) === 1
-            && (NotificationsConfig::primaryKeyType()->value !== 'bigint' || ctype_digit($id));
+        return match (NotificationsConfig::primaryKeyType()) {
+            KeyType::BigInt => preg_match('/^\d{1,19}$/', $id) === 1,
+            KeyType::Uuid => Str::isUuid($id),
+            KeyType::Ulid => Str::isUlid($id),
+        };
     }
 }
