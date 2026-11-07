@@ -21,6 +21,6 @@ final class ReminderClaims
             ->whereKey($id)
             ->where('status', ReminderStatus::Pending->value)
             ->where('due_at', '<=', $now)
-            ->incrementEach(['attempts' => 1], ['status' => ReminderStatus::Firing->value, 'claimed_at' => $now]) > 0;
+            ->toBase()->incrementEach(['attempts' => 1], ['status' => ReminderStatus::Firing->value, 'claimed_at' => $now, 'updated_at' => $now]) > 0;
     }
 }
