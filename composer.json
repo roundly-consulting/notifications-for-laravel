@@ -45,22 +45,22 @@
         "illuminate/translation": "^13.0",
         "illuminate/validation": "^13.0",
         "illuminate/view": "^13.0",
-        "roundly-consulting/crypto-for-laravel": "^1.2.1",
-        "roundly-consulting/enums-for-laravel": "^1.1.0",
-        "roundly-consulting/options-for-laravel": "^1.1.2",
-        "roundly-consulting/package-toolkit-for-laravel": "^1.4.0"
+        "roundly-consulting/crypto-for-laravel": "^2.0",
+        "roundly-consulting/enums-for-laravel": "^2.0",
+        "roundly-consulting/options-for-laravel": "^2.0",
+        "roundly-consulting/package-toolkit-for-laravel": "^2.0"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
         "nunomaduro/collision": "^8.5",
         "orchestra/testbench": "^11.0",
-        "pestphp/pest": "^4.0",
-        "pestphp/pest-plugin-arch": "^4.0",
-        "pestphp/pest-plugin-laravel": "^4.0",
+        "pestphp/pest": "^5.0",
+        "pestphp/pest-plugin-arch": "^5.0",
+        "pestphp/pest-plugin-laravel": "^5.0",
         "phpstan/extension-installer": "^1.4",
-        "roundly-consulting/contacts-for-laravel": "^1.1.2",
-        "roundly-consulting/testing-for-laravel": "^1.6.1"
+        "roundly-consulting/contacts-for-laravel": "^2.0",
+        "roundly-consulting/testing-for-laravel": "^2.0"
     },
     "suggest": {
         "roundly-consulting/contacts-for-laravel": "Route mail to the user's primary (or verified) email contact.",
