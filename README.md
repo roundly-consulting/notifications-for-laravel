@@ -18,7 +18,7 @@ delivery, preferences and suppression rules live in the package.
 
 ## Installation
 
-Requires PHP 8.4, Laravel 12 or 13, and the `hash`, `mbstring` and `openssl` extensions.
+Requires PHP 8.4 or newer, Laravel 13, and the `hash`, `mbstring` and `openssl` extensions.
 
 ```bash
 composer require roundly-consulting/notifications-for-laravel
