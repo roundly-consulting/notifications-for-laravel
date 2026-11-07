@@ -121,6 +121,41 @@ it('acknowledges the reminder an item came from', function (): void {
     $this->actingAs($manager)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertNotFound();
 });
 
+it('refuses to acknowledge for a user who lost access to the subject', function (): void {
+    $approver = user();
+    $director = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director');
+
+    Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->escalate(after: 'P1D', to: $director)
+        ->send();
+    $item = InboxItem::query()->where('recipient_id', $approver->id)->sole();
+
+    $request->company->users()->detach($approver->id);
+
+    $this->actingAs($approver)->postJson("/notifications/inbox/{$item->id}/acknowledge")
+        ->assertNotFound()
+        ->assertJsonPath('code', 'inbox_item_not_found');
+    expect(NotificationReminder::query()->sole()->status->value)->toBe('pending');
+
+    $request->company->addMember($approver, 'approver');
+    $this->actingAs($approver)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertOk()->assertJsonPath('acknowledged', 1);
+});
+
+it('answers 404 when acknowledging an item of an unregistered type or a deleted subject', function (): void {
+    $owner = user();
+    $contract = contract(owner: $owner);
+    Notifications::send('contract.expiring', $contract, $owner);
+    $item = InboxItem::query()->sole();
+
+    $contract->delete();
+    $this->actingAs($owner)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertNotFound();
+
+    InboxItem::query()->whereKey($item->id)->update(['type' => 'gone.type']);
+    $this->actingAs($owner)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertNotFound();
+});
+
 it('shows and updates the user\'s preferences', function (): void {
     $user = user();
 

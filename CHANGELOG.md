@@ -17,7 +17,8 @@ Initial public release.
 - One send API — `Notifications::send()`, the fluent `Notifications::type()->…->send()` and
   `Notifications::for($subject)` — with pluggable recipients (`Recipients::users()`, `role()`,
   `members()`, `owner()`, `using()`, `merge()`), idempotency keys and large-set fan-out on the queue.
-  Access is re-checked at every hop: send, queued mail, held mail, digest, reminder, escalation.
+  Access is re-checked at every hop: send, queued mail, held mail, digest, reminder, escalation,
+  and acknowledgement — a user who lost access cannot stop an escalation through an old item.
 - An in-app inbox: one item per recipient, type, subject and context per window (count and latest
   actor), read/unread/archive/delete, "mark all read" scoped by the inbox handle's filters
   (`Notifications::inbox($user)->in($company)->markAllRead()`; `POST /inbox/read-all` takes

@@ -460,6 +460,24 @@ it('acknowledges on read for a rule that says so', function (): void {
     expect(NotificationReminder::query()->where('type', 'ack.read')->where('kind', 'escalation')->sole()->cancel_reason)->toBe(CancelReason::Acknowledged);
 });
 
+it('does not acknowledge on read for a reader who lost access', function (): void {
+    Notifications::define('ack.read')->subject(Contract::class)
+        ->reminders(Reminder::before('expires_at', 'P1D')->to(Recipients::owner())->acknowledgedOnRead()->escalate('P1D', Recipients::owner()))
+        ->title(fn (): string => 'x')->register();
+    $contract = expiringContract('2026-11-11 10:00:00');
+
+    at('2026-11-10 10:00:00');
+    Notifications::sweep();
+
+    $item = InboxItem::query()->where('type', 'ack.read')->sole();
+    $contract->company->users()->detach($contract->owner_id);
+    Notifications::inbox($contract->owner)->markRead($item);
+    Notifications::inbox($contract->owner)->markAllRead();
+
+    expect($item->fresh()->read_at)->not->toBeNull()
+        ->and(NotificationReminder::query()->where('type', 'ack.read')->where('kind', 'escalation')->sole()->status)->toBe(ReminderStatus::Pending);
+});
+
 it('absorbs a concurrent sync: never throws on a conflict (C-59b)', function (): void {
     $contract = expiringContract();
 

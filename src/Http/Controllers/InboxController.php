@@ -7,12 +7,16 @@ namespace RoundlyConsulting\Notifications\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Http\Requests\InboxIndexRequest;
 use RoundlyConsulting\Notifications\Http\Requests\ReadAllRequest;
 use RoundlyConsulting\Notifications\Http\Resources\InboxCountsResource;
 use RoundlyConsulting\Notifications\Http\Resources\InboxItemResource;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\NotificationsManager;
+use RoundlyConsulting\Notifications\Support\Access;
+use RoundlyConsulting\Notifications\Support\Subjects;
+use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
  * The authenticated user's inbox. `{item}` is resolved inside this user's inbox only, so another
@@ -22,6 +26,7 @@ final class InboxController extends Controller
 {
     public function __construct(
         private readonly NotificationsManager $notifications,
+        private readonly TypeRegistry $types,
     ) {}
 
     public function index(InboxIndexRequest $request): JsonResource
@@ -110,20 +115,28 @@ final class InboxController extends Controller
     }
 
     /**
-     * Acknowledges the reminder or escalation the item came from (stops its escalation).
+     * Acknowledges the reminder or escalation the item came from (stops its escalation). A user
+     * who can no longer see the subject gets the same 404 as for a foreign item: an old item is no
+     * key to silence an escalation others rely on.
      */
     public function acknowledge(Request $request, string $item): JsonResource|JsonResponse
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
             $user = $this->user($request);
             $found = $this->notifications->inbox($user)->find($item);
-            $acknowledged = 0;
 
-            if ($found->subject !== null) {
-                $acknowledged = $this->notifications->for($found->subject)->acknowledge($found->type, $user);
+            if ($found->subject_type === null) {
+                return new JsonResponse(['acknowledged' => 0]);
             }
 
-            return new JsonResponse(['acknowledged' => $acknowledged]);
+            $type = $this->types->get($found->type);
+            $subject = $type === null ? null : Subjects::find($type, $found->subject_type, $found->subject_id);
+
+            if ($type === null || $subject === null || ! Access::allows($type, $user, $subject, true)) {
+                throw InboxItemNotFoundException::notFound();
+            }
+
+            return new JsonResponse(['acknowledged' => $this->notifications->for($subject)->acknowledge($found->type, $user)]);
         });
     }
 
