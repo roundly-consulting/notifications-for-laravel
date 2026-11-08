@@ -66,6 +66,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - Acknowledging a subject no longer silences its later reminders' escalations. It stamped the
   pending later offsets too, so when one fired, its escalation was cancelled as acknowledged and
   the managers were never told. Only reminders that already went out are stamped now.
+- Replaying a send with the same `once()` key no longer re-arms its escalation after the chain
+  fired or was acknowledged: a replay that reached nobody new arms nothing, so the director is
+  not told twice, or after the acknowledgement.
+- A send that throws while delivering no longer leaves an escalation armed: the chain is armed
+  only after delivery went through.
 
 ## 1.0.0 - 2026-11-07
 

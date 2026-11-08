@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Actions\Sending;
 
+use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Notifications\DataTransferObjects\RecipientOutcome;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
+use RoundlyConsulting\Notifications\Enums\InboxOutcome;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationSubjectException;
 use RoundlyConsulting\Notifications\Jobs\DeliverToRecipientsJob;
+use RoundlyConsulting\Notifications\NotificationType;
 use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\Contexts;
 use RoundlyConsulting\Notifications\Support\Escalations;
@@ -17,6 +21,7 @@ use RoundlyConsulting\Notifications\Support\NotificationsConfig;
 use RoundlyConsulting\Notifications\Support\Payloads;
 use RoundlyConsulting\Notifications\Support\PreparedSend;
 use RoundlyConsulting\Notifications\Support\Queues;
+use RoundlyConsulting\Notifications\Support\Receipts;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
@@ -80,11 +85,10 @@ final readonly class SendNotificationAction
             at: Clock::now(),
         );
 
-        if ($data->escalations !== []) {
-            Escalations::armForSend($type, $subject, $data, $send->at);
-        }
-
         if (count($recipients) > NotificationsConfig::fanOutAbove() && NotificationsConfig::queueEnabled()) {
+            // A keyed replay that already reached everyone arms nothing.
+            $replay = $data->idempotencyKey !== null && Receipts::reachedAll($data->idempotencyKey, $recipients);
+
             foreach (array_chunk($recipients, NotificationsConfig::fanOutChunk()) as $chunk) {
                 Queues::dispatch(new DeliverToRecipientsJob(
                     type: $type->key(),
@@ -99,6 +103,10 @@ final readonly class SendNotificationAction
                 ));
             }
 
+            if (! $replay) {
+                $this->arm($type, $subject, $data, $send);
+            }
+
             return new SendResult($type->key(), queued: count($recipients));
         }
 
@@ -108,6 +116,21 @@ final readonly class SendNotificationAction
             $outcomes[] = $this->deliver->execute($send, $recipient);
         }
 
+        // Armed only once delivery went through (a throw above arms nothing), and not for a keyed
+        // replay every recipient had already received — after its chain fired or was acknowledged.
+        $replay = $outcomes !== [] && array_all($outcomes, static fn (RecipientOutcome $outcome): bool => $outcome->inbox === InboxOutcome::Duplicate);
+
+        if (! $replay) {
+            $this->arm($type, $subject, $data, $send);
+        }
+
         return new SendResult($type->key(), $outcomes);
+    }
+
+    private function arm(NotificationType $type, ?Model $subject, SendNotificationData $data, PreparedSend $send): void
+    {
+        if ($data->escalations !== [] && $subject !== null) {
+            Escalations::armForSend($type, $subject, $data, $send->at);
+        }
     }
 }

@@ -30,6 +30,7 @@ use RoundlyConsulting\Notifications\Reminders\ReminderRule;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Notifications\Traits\HasNotificationReminders;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
@@ -378,6 +379,71 @@ it('arms one escalation chain for repeated sends about one subject', function ()
     $send($request);
 
     expect($pending()->count())->toBe(1);
+});
+
+it('does not re-arm a keyed send\'s escalation on replay', function (Closure $between): void {
+    $approver = user();
+    $director = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director');
+    $send = fn () => Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->once('submitted:1')
+        ->escalate(after: 'P1D', to: $director)
+        ->send();
+
+    $send();
+    $between($request);
+    $sentBefore = Notification::sent($director, TypedMailNotification::class)->count();
+
+    at('2026-11-10 11:00:00');
+    $send();
+    at('2026-11-11 11:00:00');
+    Notifications::sweep();
+
+    expect(Notification::sent($director, TypedMailNotification::class)->count())->toBe($sentBefore)
+        ->and(NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->where('status', ReminderStatus::Pending->value)->count())->toBe(0);
+})->with([
+    'after level 1 fired' => [function (): void {
+        at('2026-11-10 10:00:00');
+        Notifications::sweep();
+    }],
+    'after an acknowledgement' => [fn ($request) => Notifications::for($request)->acknowledge()],
+]);
+
+it('does not re-arm a keyed fan-out\'s escalation on replay, but arms it for a new recipient', function (): void {
+    config()->set('notifications.fan_out.queue_above', 1);
+    $director = user();
+    $first = user();
+    $second = user();
+    $request = purchaseRequest();
+    $request->company->addMember($first, 'approver')->addMember($second, 'approver')->addMember($director, 'director');
+    $escalations = fn () => NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->count();
+    $send = fn (array $to) => Notifications::type('request.awaiting_approval')->about($request)->to($to)->with(['reference' => 'PR-1'])
+        ->once('submitted:1')->escalate(after: 'PT1H', to: $director)->send();
+
+    expect($send([$first, $second])->queued)->toBe(2)
+        ->and($escalations())->toBe(1);
+
+    at('2026-11-09 11:00:00');
+    Notifications::sweep();
+    $send([$first, $second]);
+
+    expect($escalations())->toBe(1);
+
+    $send([$first, $second, user()]);
+
+    expect($escalations())->toBe(2);
+});
+
+it('arms no escalation when the send throws', function (): void {
+    Notifications::define('flaky.access')->subject(PurchaseRequest::class)
+        ->access(fn (): bool => throw new RuntimeException('access backend down'))
+        ->title(fn (): string => 'x')->register();
+    $request = purchaseRequest();
+
+    expect(fn () => Notifications::type('flaky.access')->about($request)->to(user())->escalate('P1D', user())->send())
+        ->toThrow(RuntimeException::class, 'access backend down')
+        ->and(NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->count())->toBe(0);
 });
 
 it('requires a subject to escalate a send', function (): void {

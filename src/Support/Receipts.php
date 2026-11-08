@@ -35,4 +35,27 @@ final class Receipts
 
         return $class::query()->insertOrIgnore($attributes) > 0;
     }
+
+    /**
+     * Whether this key already reached every one of these recipients (a replay).
+     *
+     * @param  list<Model>  $recipients
+     */
+    public static function reachedAll(string $idempotencyKey, array $recipients): bool
+    {
+        if ($recipients === []) {
+            return false;
+        }
+
+        $reached = NotificationModels::receipt()::query()
+            ->where('key', Keys::receipt($idempotencyKey))
+            ->where(static function ($query) use ($recipients): void {
+                foreach ($recipients as $recipient) {
+                    $query->orWhere(static fn ($pair) => $pair->where('recipient_type', $recipient->getMorphClass())->where('recipient_id', $recipient->getKey()));
+                }
+            })
+            ->count();
+
+        return $reached >= count($recipients);
+    }
 }
