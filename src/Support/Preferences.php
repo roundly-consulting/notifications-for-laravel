@@ -98,6 +98,15 @@ final class Preferences
     }
 
     /**
+     * A category channel that cannot be switched off: the inbox, unless inbox muting is on (a
+     * mandatory type in the category ignores the category anyway).
+     */
+    public static function categoryLocked(Channel $channel): bool
+    {
+        return $channel === Channel::Inbox && ! NotificationsConfig::inboxMutable();
+    }
+
+    /**
      * @param  array<string, bool>  $old
      * @param  array<string, bool>  $new
      */

@@ -6,6 +6,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
+### Changed
+
+- Behaviour change: muting the inbox for a whole category while
+  `notifications.preferences.inbox_mutable` is off now throws `LockedNotificationChannelException`
+  (422, `notification_channel_locked`) — through `muteCategory($category, Channel::Inbox)`, a
+  `PreferencesUpdate` and `PATCH /preferences` (under `categories.<category>.inbox`) — like the
+  same mute of one type. It stored an override that was then ignored. Switching it on stores
+  nothing.
+
 ### Fixed
 
 - A digest whose job waits in the queue longer than `notifications.digest.lease` is no longer

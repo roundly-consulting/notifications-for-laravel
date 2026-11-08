@@ -20,6 +20,15 @@ final class LockedNotificationChannelException extends NotificationsException
     }
 
     /**
+     * A category mute of a channel no type lets the user switch off (the inbox, unless inbox
+     * muting is on).
+     */
+    public static function forCategory(string $category, Channel $channel): self
+    {
+        return self::make('notification_channel_locked', 422, ['category' => $category, 'channel' => $channel->label()], 'notification_category_channel_locked');
+    }
+
+    /**
      * `mute($type)` found no channel of the type that can be switched off.
      */
     public static function nothingToMute(string $type): self

@@ -28,6 +28,7 @@ return [
     'missing_access_check' => 'Typ upozornenia „:type“ overuje oprávnenie „:ability“ na :subject, no :subject nemá politiku a oprávnenie nie je definované.',
     'mandatory_notification' => 'Upozornenie „:type“ je povinné a nemožno ho vypnúť.',
     'notification_channel_locked' => 'Kanál „:channel“ upozornenia „:type“ nemožno vypnúť.',
+    'notification_category_channel_locked' => 'Kanál „:channel“ kategórie „:category“ nemožno vypnúť.',
     'notification_nothing_to_mute' => 'Upozornenie „:type“ nemá žiadny kanál, ktorý možno vypnúť.',
     'inbox_item_not_found' => 'Upozornenie sa nenašlo.',
     'invalid_quiet_hours' => 'Tiché hodiny sa musia začínať a končiť v inom čase.',

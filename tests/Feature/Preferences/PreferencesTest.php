@@ -38,6 +38,8 @@ use RoundlyConsulting\Notifications\Options\TimezonePreference;
 use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\Preferences;
+use RoundlyConsulting\Notifications\Support\PreferenceUpdates;
+use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\RequestAwaitingApproval;
 use RoundlyConsulting\Options\Facades\Options;
@@ -655,3 +657,24 @@ it('keeps the preference lock for later writes after a host transaction rolled b
     expect($takeable)->toBeFalse();                 // nobody else could take the lock mid-write
     Option::flushEventListeners();
 });
+
+it('refuses switching off the locked inbox for a whole category', function (Closure $write, string $field): void {
+    $user = user();
+
+    expect(fn () => $write(Notifications::preferences($user)))
+        ->toThrow(LockedNotificationChannelException::class, 'The "In-app" channel of the category "comments" cannot be switched off.');
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+
+    app()->setLocale('sk');
+    expect(fn () => $write(Notifications::preferences($user)))->toThrow(LockedNotificationChannelException::class, 'Kanál „V aplikácii“ kategórie „comments“ nemožno vypnúť.');
+
+    expect(array_keys(PreferenceUpdates::problems(new PreferencesUpdate(categories: ['comments' => ['inbox' => false]]), app(TypeRegistry::class))))->toBe([$field]);
+
+    config()->set('notifications.preferences.inbox_mutable', true);
+    $write(Notifications::preferences($user));
+    expect(Preferences::channelMap($user)['categories'])->toBe(['comments' => ['inbox' => false]]);
+})->with([
+    'mute' => [fn (PreferencesHandle $p) => $p->muteCategory('comments', Channel::Inbox), 'categories.comments.inbox'],
+    'update' => [fn (PreferencesHandle $p) => $p->update(new PreferencesUpdate(categories: ['comments' => ['inbox' => false]])), 'categories.comments.inbox'],
+]);

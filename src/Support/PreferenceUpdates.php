@@ -60,9 +60,13 @@ final class PreferenceUpdates
                 continue;
             }
 
-            foreach (array_keys($channels) as $channel) {
-                if (Channel::tryFrom($channel) === null) {
+            foreach ($channels as $channel => $enabled) {
+                $case = Channel::tryFrom($channel);
+
+                if ($case === null) {
                     $problems["categories.{$category}"] = InvalidNotificationDataException::unknownChannel($channel);
+                } elseif ($enabled === false && Preferences::categoryLocked($case)) {
+                    $problems["categories.{$category}.{$channel}"] = LockedNotificationChannelException::forCategory($category, $case);
                 }
             }
         }
