@@ -147,3 +147,11 @@ it('fires only the requested kind with --only', function (string $part, Reminder
     'reminders' => ['reminders', ReminderKind::Reminder, ReminderKind::Escalation],
     'escalations' => ['escalations', ReminderKind::Escalation, ReminderKind::Reminder],
 ]);
+
+it('fires no reminder or escalation for an --only without them', function (): void {
+    $row = NotificationReminder::factory()->create(['due_at' => CarbonImmutable::now('UTC')]);
+
+    $this->artisan('notifications:sweep', ['--only' => 'claims,deliveries'])->assertSuccessful();
+
+    expect($row->fresh()?->status)->toBe(ReminderStatus::Pending);
+});
