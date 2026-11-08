@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Actions\Sending;
 
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Event;
@@ -18,6 +17,7 @@ use RoundlyConsulting\Notifications\Enums\Priority;
 use RoundlyConsulting\Notifications\Events\NotificationMailHeld;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\Support\DeliveryPayloads;
 use RoundlyConsulting\Notifications\Support\DigestSchedule;
 use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
@@ -104,7 +104,7 @@ final readonly class QueueMailDeliveryAction
             'actor_id' => $send->actor?->getKey(),
             'context_key' => $send->context?->key,
             'context_label' => $send->context?->label,
-            'data' => $this->storedData($send),
+            'data' => DeliveryPayloads::stored($send),
             'source' => NotificationDelivery::SOURCE_TYPE,
             'attempts' => 0,
         ];
@@ -151,7 +151,7 @@ final readonly class QueueMailDeliveryAction
         $delivery->last_event_at = $send->at;
 
         if ($full) {
-            $delivery->data = $this->storedData($send);
+            $delivery->data = DeliveryPayloads::stored($send);
             $delivery->inbox_item_id = $item === null ? $delivery->inbox_item_id : ModelRefs::key($item);
 
             if ($send->actor !== null) {
@@ -173,31 +173,5 @@ final readonly class QueueMailDeliveryAction
         $delivery->save();
 
         return $delivery;
-    }
-
-    /**
-     * The data, plus what the mail needs to know about the send's escalation and reminder.
-     *
-     * @return array<string, mixed>
-     */
-    private function storedData(PreparedSend $send): array
-    {
-        $meta = [];
-
-        if ($send->escalationLevel > 0) {
-            $meta['escalation'] = $send->escalationLevel;
-        }
-
-        if ($send->reminder !== null) {
-            $meta['reminder'] = [
-                'id' => $send->reminder->id,
-                'rule' => $send->reminder->rule,
-                'offset' => $send->reminder->offset,
-                'due_at' => $send->reminder->dueAt->format(CarbonImmutable::ATOM),
-                'level' => $send->reminder->level,
-            ];
-        }
-
-        return $meta === [] ? $send->data : $send->data + ['_notifications' => $meta];
     }
 }

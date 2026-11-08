@@ -13,6 +13,7 @@ use RoundlyConsulting\Notifications\Enums\InboxOutcome;
 use RoundlyConsulting\Notifications\Events\InboxItemCreated;
 use RoundlyConsulting\Notifications\Events\InboxItemUpdated;
 use RoundlyConsulting\Notifications\Models\InboxItem;
+use RoundlyConsulting\Notifications\Support\DeliveryPayloads;
 use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
@@ -88,7 +89,7 @@ final readonly class RecordInboxItemAction
             'actor_type' => $send->actor?->getMorphClass(),
             'actor_id' => $send->actor?->getKey(),
             'count' => 1,
-            'data' => $send->data,
+            'data' => DeliveryPayloads::stored($send),
             'title' => Snapshots::title($send->type, $payload, $send->title),
             'url' => Snapshots::url($send->type, $payload),
             'open_key' => $window === null ? null : $key,
@@ -113,7 +114,7 @@ final readonly class RecordInboxItemAction
         $item->forceFill([
             'count' => $count,
             'last_event_at' => $send->at,
-            'data' => $send->data,
+            'data' => DeliveryPayloads::stored($send),
             // A new event makes a read item unread again.
             'read_at' => null,
             'title' => Snapshots::title($send->type, $payload, $send->title),

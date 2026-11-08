@@ -342,7 +342,9 @@ it('chains send-level escalation levels and stops them on acknowledgement', func
     at('2026-11-10 10:00:00');
     Notifications::sweep();
     Notification::assertSentTo($director, TypedMailNotification::class);
-    expect(InboxItem::query()->where('recipient_id', $director->id)->sole()->data)->toBe(['reference' => 'PR-1']);
+    // The item keeps the send's data; `_notifications` carries the escalation for later renders (O-12).
+    expect(InboxItem::query()->where('recipient_id', $director->id)->sole()->data)->toMatchArray(['reference' => 'PR-1'])
+        ->and(InboxItem::query()->where('recipient_id', $director->id)->sole()->data['_notifications']['escalation'])->toBe(1);
 
     Notifications::for($request)->acknowledge();
 

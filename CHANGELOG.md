@@ -51,6 +51,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - `digests()->preview()` leaves out what the digest would drop: items whose subject is gone or no
   longer visible to the user, and muted types. It showed titles of records the user can no longer
   see.
+- `InboxItemResource` renders escalated and reminder items with `$payload->escalated` and
+  `$payload->reminder` set, so a type whose title, body or url uses them looks the same over the
+  API as in the stored item and the mail. Inbox items now keep that metadata under
+  `data._notifications` (stripped from the API, as on deliveries); items written earlier render
+  as before.
 
 ## 1.1.0 - 2026-11-08
 

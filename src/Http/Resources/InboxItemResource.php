@@ -60,7 +60,7 @@ final class InboxItemResource extends JsonResource
         $meta = is_array($data[DeliveryPayloads::META] ?? null) ? $data[DeliveryPayloads::META] : [];
         unset($data[DeliveryPayloads::META]);
 
-        [$title, $body, $url] = $this->render($type, $item, $data, $request, ($meta['source'] ?? null) === 'interop');
+        [$title, $body, $url] = $this->render($type, $item, $data, $meta, $request);
 
         return [
             'id' => $item->getKey(),
@@ -85,11 +85,12 @@ final class InboxItemResource extends JsonResource
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<array-key, mixed>  $meta  the stored `_notifications` metadata
      * @return array{0: string, 1: string|null, 2: string|null}
      */
-    private function render(?NotificationType $type, InboxItem $item, array $data, Request $request, bool $interop): array
+    private function render(?NotificationType $type, InboxItem $item, array $data, array $meta, Request $request): array
     {
-        if ($type === null || $interop) {
+        if ($type === null || ($meta['source'] ?? null) === 'interop') {
             return [$item->title, null, $item->url];
         }
 
@@ -112,6 +113,8 @@ final class InboxItemResource extends JsonResource
             firstAt: $item->first_event_at,
             lastAt: $item->last_event_at,
             channel: Channel::Inbox,
+            escalated: DeliveryPayloads::escalated($meta),
+            reminder: DeliveryPayloads::reminderOf($meta),
         );
 
         try {

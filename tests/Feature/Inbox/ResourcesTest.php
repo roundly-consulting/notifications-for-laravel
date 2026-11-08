@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -22,10 +23,12 @@ use RoundlyConsulting\Notifications\Http\Resources\NotificationContextResource;
 use RoundlyConsulting\Notifications\Mail\InboxChannel;
 use RoundlyConsulting\Notifications\Mail\InboxMessage;
 use RoundlyConsulting\Notifications\Models\InboxItem;
+use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 
 /**
@@ -312,4 +315,24 @@ it('exposes no data for an item whose type is no longer registered', function ()
 
     expect($rendered['data'])->toBe([])
         ->and($rendered['title'])->toBe($item->title);
+});
+
+it('renders an escalated reminder item as escalated, like its stored title and mail', function (): void {
+    Notification::fake();
+    Notifications::define('needs.approval')->subject(PurchaseRequest::class)->access(fn (): bool => true)
+        ->title(fn (NotificationPayload $p): string => ($p->escalated ? 'OVERDUE: ' : '').'Needs approval'.($p->reminder === null ? '' : ' (reminder)'))->register();
+    $approver = user();
+    $director = user();
+    $request = purchaseRequest();
+    Notifications::type('needs.approval')->about($request)->to($approver)->escalate('P1D', $director)->send();
+
+    at(CarbonImmutable::now('UTC')->addDay()->toDateTimeString());
+    Notifications::sweep();
+
+    $item = InboxItem::query()->where('recipient_id', $director->id)->sole();
+    $rendered = renderItem($item, $director);
+
+    expect($item->title)->toBe('OVERDUE: Needs approval (reminder)')
+        ->and($rendered['title'])->toBe('OVERDUE: Needs approval (reminder)')
+        ->and($rendered['data'])->toBe([]);
 });
