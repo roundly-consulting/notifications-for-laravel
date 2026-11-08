@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Notifications\Support;
 
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationSubjectException;
+use RoundlyConsulting\Notifications\Exceptions\InvalidReminderRuleException;
 
 /**
  * The checks a send runs before it touches the store: the type exists, the subject is of the
@@ -45,8 +46,13 @@ final class SendValidation
         $context = Contexts::resolve($data->context ?? $type->context($subject));
 
         // Stored escalation recipients must survive a JSON round trip: refuse closures up front.
+        // A level's own type must take the subject, or the level would die at fire time.
         foreach ($data->escalations as $escalation) {
             Escalations::storedRecipients($escalation->to);
+
+            if ($escalation->type !== null && ! $types->takes($escalation->type, $subject::class)) {
+                throw InvalidReminderRuleException::escalationType($type->key(), $escalation->type);
+            }
         }
 
         return new ValidatedSend($type, $payload, $context);

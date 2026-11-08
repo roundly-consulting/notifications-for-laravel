@@ -14,6 +14,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `PreferencesUpdate` and `PATCH /preferences` (under `categories.<category>.inbox`) — like the
   same mute of one type. It stored an override that was then ignored. Switching it on stores
   nothing.
+- Behaviour change: an escalation level's own `type:` must be registered and take the escalated
+  subject (its `subject()` is the subject's class or a parent). `->escalate(type: …)` on a send
+  throws `InvalidReminderRuleException` at the call, and a type rule's escalation is checked once
+  the app has booted (at registration for a type added later). Such a level used to be accepted
+  and die at fire time: retried, cancelled `unknown`, nobody escalated.
 
 ### Fixed
 

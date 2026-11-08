@@ -110,6 +110,8 @@ final class NotificationsServiceProvider extends PackageServiceProvider
         // Interop targets may be types the host defines in its own providers' boot(), which run
         // after this one: validate once everything has booted (and again lazily on first use).
         $this->app->booted(static function (Application $app): void {
+            $app->make(TypeRegistry::class)->validateEscalations();
+
             $rules = $app->make(InteropRules::class);
 
             if ($rules->active()) {

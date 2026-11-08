@@ -54,6 +54,44 @@ final class TypeRegistry
         $this->load();
 
         $this->put($type, $source ?? ($type instanceof DefinedType ? 'define()' : class_basename($type)));
+
+        // Escalation level types may be registered later during boot: those are checked once
+        // everything has booted; a type added after that is checked at once.
+        if (app()->isBooted()) {
+            $this->validateEscalations($type);
+        }
+    }
+
+    /**
+     * Checks the `type:` of every escalation level of the type's rules (or of every type): it is
+     * registered and takes the type's subject — or the level would die at fire time.
+     */
+    public function validateEscalations(?NotificationType $only = null): void
+    {
+        foreach ($only === null ? $this->all() : [$only] as $type) {
+            foreach ($type->reminders() as $rule) {
+                foreach ($rule->escalations() as $level) {
+                    $subject = $type->subject();
+
+                    if ($level->type !== null && ($subject === null || ! $this->takes($level->type, $subject))) {
+                        throw InvalidReminderRuleException::escalationType($type->key(), $level->type);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether a type can be sent about a subject of this class: it is registered and its subject
+     * class is that class or a parent of it.
+     *
+     * @param  class-string<Model>  $subject
+     */
+    public function takes(string $type, string $subject): bool
+    {
+        $expected = $this->get($type)?->subject();
+
+        return $expected !== null && is_a($subject, $expected, true);
     }
 
     public function find(string $key): NotificationType

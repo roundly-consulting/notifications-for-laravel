@@ -329,6 +329,7 @@ it('never folds an escalation into the original send (C-79)', function (): void 
 });
 
 it('chains send-level escalation levels and stops them on acknowledgement', function (): void {
+    Notifications::define('request.overdue')->subject(PurchaseRequest::class)->title(fn (): string => 'Overdue')->register();
     $approver = user();
     $director = user();
     $board = user();
@@ -337,7 +338,7 @@ it('chains send-level escalation levels and stops them on acknowledgement', func
 
     Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
         ->escalate(after: 'P1D', to: Recipients::role($request->company, 'director'))
-        ->escalate(after: 'P2D', to: Recipients::role($request->company, 'board'), type: 'security.alert')
+        ->escalate(after: 'P2D', to: Recipients::role($request->company, 'board'), type: 'request.overdue')
         ->send();
 
     at('2026-11-10 10:00:00');
@@ -934,4 +935,31 @@ it('arms no next level when the subject is acknowledged while a level fires', fu
 
     Notification::assertNotSentTo($board, TypedMailNotification::class);
     expect(NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->where('status', ReminderStatus::Pending->value)->count())->toBe(0);
+});
+
+it('refuses an escalation to a type that cannot take the subject', function (string $level): void {
+    $request = purchaseRequest();
+
+    expect(fn () => Notifications::type('request.awaiting_approval')->about($request)->to(user())->escalate('P1D', user(), type: $level)->send())
+        ->toThrow(InvalidReminderRuleException::class, 'sends "'.$level.'", which is not registered or not about the same subject');
+
+    expect(InboxItem::query()->count())->toBe(0)
+        ->and(NotificationReminder::query()->count())->toBe(0);
+})->with([
+    'unknown type' => ['typo.key'],
+    'a type without a subject' => ['security.alert'],
+    'a type about another subject' => ['comment.posted'],
+]);
+
+it('refuses a rule escalation to a type that cannot take the subject when the type registers', function (): void {
+    expect(fn () => Notifications::define('task.late')->subject(Contract::class)
+        ->reminders(Reminder::before('expires_at', 'P1D')->to(Recipients::owner())->escalate('P1D', Recipients::owner(), type: 'security.alert'))
+        ->title(fn (): string => 'Late')->register())
+        ->toThrow(InvalidReminderRuleException::class, 'The notification type "task.late" sends "security.alert"');
+
+    app()->setLocale('sk');
+    expect(fn () => Notifications::define('task.later')->subject(Contract::class)
+        ->reminders(Reminder::before('expires_at', 'P1D')->to(Recipients::owner())->escalate('P1D', Recipients::owner(), type: 'typo.key'))
+        ->title(fn (): string => 'Late')->register())
+        ->toThrow(InvalidReminderRuleException::class, 'Typ upozornení „task.later“ eskaluje cez „typo.key“');
 });

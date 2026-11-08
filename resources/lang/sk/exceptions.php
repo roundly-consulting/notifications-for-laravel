@@ -36,6 +36,7 @@ return [
     'invalid_timezone' => '„:value“ nie je časové pásmo.',
     'invalid_reminder' => 'Pripomienka typu upozornenia „:type“ je neplatná: :reason.',
     'invalid_escalation_delay' => 'Oneskorenie eskalácie „:value“ nie je kladné trvanie, napríklad P1D alebo PT4H.',
+    'invalid_escalation_type' => 'Typ upozornení „:type“ eskaluje cez „:escalation“, ktorý nie je registrovaný alebo sa netýka toho istého predmetu.',
     'invalid_interop_mapping' => ':notification je priradené k neznámemu typu upozornenia „:type“.',
     'interop_time_critical' => ':notification je časovo kritické a môže byť priradené len k naliehavému typu bez okna, ktorý nejde do prehľadu („:type“ taký nie je).',
 ];
