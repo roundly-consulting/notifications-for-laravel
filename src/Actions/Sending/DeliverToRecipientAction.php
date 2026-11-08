@@ -15,6 +15,7 @@ use RoundlyConsulting\Notifications\Events\RecipientSkipped;
 use RoundlyConsulting\Notifications\Jobs\DeliverMailJob;
 use RoundlyConsulting\Notifications\Support\Access;
 use RoundlyConsulting\Notifications\Support\Clock;
+use RoundlyConsulting\Notifications\Support\DeliveryStates;
 use RoundlyConsulting\Notifications\Support\KeyTypes;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
@@ -85,6 +86,7 @@ final readonly class DeliverToRecipientAction
                 && $delivery->send_after->lessThanOrEqualTo(Clock::now())
                 && in_array($mailOutcome, [MailOutcome::Pending], true)) {
                 $id = ModelRefs::key($delivery);
+                DeliveryStates::dispatched([$id]);
                 Queues::dispatch(new DeliverMailJob($id));
             }
         }

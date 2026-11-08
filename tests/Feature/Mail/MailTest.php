@@ -501,3 +501,21 @@ it('sends nothing when the claimed delivery row is gone', function (): void {
 
     Notification::assertNothingSent();
 });
+
+it('dispatches a delivery whose job is still queued only once per lease', function (): void {
+    Queue::fake([DeliverMailJob::class]);
+    Notifications::send('security.alert', null, user());
+    Queue::assertPushed(DeliverMailJob::class, 1);
+
+    foreach (['10:01', '10:02', '10:03'] as $time) {
+        at("2026-11-09 {$time}:00");
+        Notifications::sweep();
+    }
+
+    Queue::assertPushed(DeliverMailJob::class, 1);
+
+    at('2026-11-09 10:10:01');                    // the job is lost or very late: dispatch again
+    Notifications::sweep();
+
+    Queue::assertPushed(DeliverMailJob::class, 2);
+});

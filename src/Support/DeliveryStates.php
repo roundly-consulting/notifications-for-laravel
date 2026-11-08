@@ -75,6 +75,7 @@ final class DeliveryStates
             'status' => DeliveryStatus::Held->value,
             'send_after' => $until->format(Clock::FORMAT),
             'attempts' => max(0, $delivery->attempts - 1),
+            'claimed_at' => null,
         ])) {
             Event::dispatch(new NotificationMailHeld($delivery->refresh(), $until));
         }
@@ -85,7 +86,23 @@ final class DeliveryStates
         self::transition($delivery, DeliveryStatus::Sending, [
             'status' => DeliveryStatus::Pending->value,
             'send_after' => $at->format(Clock::FORMAT),
+            'claimed_at' => null,
         ]);
+    }
+
+    /**
+     * Stamps pending or held rows whose job was just dispatched (`claimed_at` = dispatched at).
+     *
+     * @param  list<mixed>  $ids
+     */
+    public static function dispatched(array $ids): void
+    {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            NotificationModels::delivery()::query()
+                ->whereKey($chunk)
+                ->whereIn('status', [DeliveryStatus::Pending->value, DeliveryStatus::Held->value])
+                ->update(['claimed_at' => Clock::now()->format(Clock::FORMAT)]);
+        }
     }
 
     /**

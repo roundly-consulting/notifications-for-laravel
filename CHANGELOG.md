@@ -56,6 +56,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   API as in the stored item and the mail. Inbox items now keep that metadata under
   `data._notifications` (stripped from the API, as on deliveries); items written earlier render
   as before.
+- The sweep no longer queues another mail job for a delivery whose job is still waiting in the
+  queue. Under a backlog every sweep added up to 1 000 duplicate (no-op) jobs; a due delivery is
+  now dispatched again only after `notifications.mail.lease`, in case its job was lost.
 
 ## 1.1.0 - 2026-11-08
 
