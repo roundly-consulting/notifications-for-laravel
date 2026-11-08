@@ -146,3 +146,35 @@ it('surfaces a deadlock inside a host transaction to the host, and retries it at
 
     Notification::assertNotSentTo(User::query()->first(), TypedMailNotification::class);
 });
+
+it('cancels the next escalation level when an acknowledgement races the level\'s final write (F-4)', function (): void {
+    $approver = user();
+    $director = user();
+    $board = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director')->addMember($board, 'board');
+    Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->escalate(after: 'P1D', to: $director)
+        ->escalate(after: 'P1D', to: $board)
+        ->send();
+
+    $racer = null;
+
+    // Right after the fire step reads whether the level was acknowledged — inside its final
+    // transaction, before it arms the next level — a second session acknowledges the subject.
+    DB::listen(function ($query) use (&$racer, $request): void {
+        if ($racer !== null || ! str_contains($query->sql, 'acknowledged_at') || ! str_contains(strtolower($query->sql), 'for update')) {
+            return;
+        }
+
+        $racer = (new Racer)->run(fn (): string => 'acknowledged:'.Notifications::for(PurchaseRequest::query()->findOrFail($request->id))->acknowledge())
+            ->waitUntilBlockedOrDone();
+    });
+
+    at('2026-11-10 10:00:00');
+    Notifications::sweep();
+
+    expect($racer)->not->toBeNull()
+        ->and($racer?->outcome())->toStartWith('acknowledged:')
+        ->and(NotificationReminder::query()->where('level', 2)->sole()->status->value)->toBe('cancelled');
+})->skip(fn (): bool => ! Racer::available(), 'needs a real engine and pcntl');
