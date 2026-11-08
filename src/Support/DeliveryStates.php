@@ -43,11 +43,12 @@ final class DeliveryStates
         $now = Clock::now();
         $keepKey = $delivery->window_ends_at !== null && $now->lessThan($delivery->window_ends_at);
 
+        // Keeping the key means leaving the column alone: writing back the in-memory value would
+        // clash with a row that took the key over while this one was still sending.
         if (self::transition($delivery, DeliveryStatus::Sending, [
             'status' => DeliveryStatus::Sent->value,
             'sent_at' => $now->format(Clock::FORMAT),
-            'open_key' => $keepKey ? $delivery->open_key : null,
-        ])) {
+        ] + ($keepKey ? [] : ['open_key' => null]))) {
             Event::dispatch(new NotificationMailSent($delivery->refresh()));
         }
     }

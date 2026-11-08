@@ -592,3 +592,30 @@ it('treats host global scopes the same on every hop', function (string $class, C
     'a soft-deleting subject' => [Contract::class, fn () => contract()],
     'a plain subject' => [PurchaseRequest::class, fn () => purchaseRequest()],
 ]);
+
+it('marks a delivery sent without writing back an open key another row took over meanwhile', function (): void {
+    $user = user();
+    $sending = NotificationDelivery::factory()->recipient($user)->status(DeliveryStatus::Sending)->create([
+        'open_key' => 'dedupe-key', 'window_ends_at' => CarbonImmutable::now('UTC')->addMinutes(10),
+    ]);
+
+    // Another mail of the window took the key while this one was still sending (O-10's grace).
+    NotificationDelivery::query()->whereKey($sending->id)->update(['open_key' => null]);
+    $other = NotificationDelivery::factory()->recipient($user)->create(['open_key' => 'dedupe-key']);
+
+    DeliveryStates::sent($sending);
+
+    expect($sending->fresh()?->status)->toBe(DeliveryStatus::Sent)
+        ->and($sending->fresh()?->open_key)->toBeNull()
+        ->and($other->fresh()?->open_key)->toBe('dedupe-key');
+});
+
+it('keeps the open key of a delivery sent inside its window', function (): void {
+    $sending = NotificationDelivery::factory()->recipient(user())->status(DeliveryStatus::Sending)->create([
+        'open_key' => 'dedupe-key', 'window_ends_at' => CarbonImmutable::now('UTC')->addMinutes(10),
+    ]);
+
+    DeliveryStates::sent($sending);
+
+    expect($sending->fresh()?->open_key)->toBe('dedupe-key');
+});

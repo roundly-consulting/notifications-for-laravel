@@ -19,6 +19,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   throws `InvalidReminderRuleException` at the call, and a type rule's escalation is checked once
   the app has booted (at registration for a type added later). Such a level used to be accepted
   and die at fire time: retried, cancelled `unknown`, nobody escalated.
+- Behaviour change: inbox items of escalations and reminders keep the escalation level and the
+  reminder reference under `data._notifications`, as deliveries do. The API and `publicData()`
+  never see it, but code reading `$item->data` raw now finds that key on those items.
 
 ### Fixed
 
@@ -67,9 +70,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   see.
 - `InboxItemResource` renders escalated and reminder items with `$payload->escalated` and
   `$payload->reminder` set, so a type whose title, body or url uses them looks the same over the
-  API as in the stored item and the mail. Inbox items now keep that metadata under
-  `data._notifications` (stripped from the API, as on deliveries); items written earlier render
-  as before.
+  API as in the stored item and the mail. Items written by 1.1.0 and earlier render as before.
 - The sweep no longer queues another mail job for a delivery whose job is still waiting in the
   queue. Under a backlog every sweep added up to 1 000 duplicate (no-op) jobs; a due delivery is
   now dispatched again only after `notifications.mail.lease`, in case its job was lost.
@@ -97,6 +98,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - The Laravel `inbox` channel (`Notifications::inboxMessage()`) also re-reads the subject before
   the access check: a message about a soft-deleted subject, or one that changed since it was
   loaded, no longer gets an inbox item.
+- A mail marked sent inside its window keeps its de-dup key without writing it back. When another
+  mail had taken the key over meanwhile, that write raised a unique violation after the mail had
+  gone out, and the delivered row was later failed as `unknown`.
 
 ## 1.1.0 - 2026-11-08
 
