@@ -23,10 +23,14 @@ final readonly class FireDueRemindersAction
         private FireEscalationAction $fireEscalation,
     ) {}
 
-    public function execute(): FiredReminders
+    /**
+     * @param  ReminderKind|null  $kind  only reminders or only escalations (`sweep --only`); null fires both
+     */
+    public function execute(?ReminderKind $kind = null): FiredReminders
     {
         $rows = NotificationModels::reminder()::query()
             ->where('status', ReminderStatus::Pending->value)
+            ->when($kind !== null, static fn ($query) => $query->where('kind', $kind?->value))
             ->where('due_at', '<=', Clock::now()->format(Clock::FORMAT))
             ->orderBy('due_at')
             ->limit(NotificationsConfig::reminderBatch())

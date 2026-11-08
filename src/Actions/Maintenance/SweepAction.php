@@ -9,6 +9,7 @@ use RoundlyConsulting\Notifications\Actions\Delivery\ExpireStaleClaimsAction;
 use RoundlyConsulting\Notifications\Actions\Digests\SendDueDigestsAction;
 use RoundlyConsulting\Notifications\Actions\Reminders\FireDueRemindersAction;
 use RoundlyConsulting\Notifications\DataTransferObjects\SweepReport;
+use RoundlyConsulting\Notifications\Enums\ReminderKind;
 
 /**
  * Everything time-driven, in one scheduled command (`notifications:sweep`, every minute): expire
@@ -35,7 +36,12 @@ final readonly class SweepAction
         $expired = $runs('claims') ? $this->expire->execute() : 0;
         $deliveries = $runs('deliveries') ? $this->deliveries->execute() : 0;
         $digests = $runs('digests') ? $this->digests->execute() : 0;
-        $fired = $runs('reminders') || $runs('escalations') ? $this->reminders->execute() : null;
+        $fired = match (true) {
+            $runs('reminders') && $runs('escalations') => $this->reminders->execute(),
+            $runs('reminders') => $this->reminders->execute(ReminderKind::Reminder),
+            $runs('escalations') => $this->reminders->execute(ReminderKind::Escalation),
+            default => null,
+        };
 
         return new SweepReport(
             deliveries: $deliveries,

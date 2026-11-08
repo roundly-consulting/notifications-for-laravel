@@ -94,6 +94,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   sweep.
 - Month and year reminder offsets no longer overflow: a month before 31 March is 28 February
   (it was 3 March), and a year after 29 February is 28 February.
+- `notifications:sweep --only=reminders` fires only reminders and `--only=escalations` only
+  escalations; either one fired both.
 
 ## 1.0.0 - 2026-11-07
 

@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestRunStatus;
+use RoundlyConsulting\Notifications\Enums\ReminderKind;
 use RoundlyConsulting\Notifications\Enums\ReminderStatus;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Models\DigestRun;
@@ -129,3 +131,19 @@ it('reports every misconfiguration it checks', function (): void {
         ->expectsOutputToContain('Company is not Authenticatable')
         ->assertFailed();
 });
+
+it('fires only the requested kind with --only', function (string $part, ReminderKind $fires, ReminderKind $waits): void {
+    $now = CarbonImmutable::now('UTC');
+    $reminder = NotificationReminder::factory()->create(['kind' => ReminderKind::Reminder, 'due_at' => $now]);
+    $escalation = NotificationReminder::factory()->create(['kind' => ReminderKind::Escalation, 'level' => 1, 'due_at' => $now]);
+    $rows = [ReminderKind::Reminder->value => $reminder, ReminderKind::Escalation->value => $escalation];
+
+    $this->artisan('notifications:sweep', ['--only' => $part])->assertSuccessful();
+
+    // Both rows have an unregistered type: a fired row is cancelled, a waiting one stays pending.
+    expect($rows[$fires->value]->fresh()?->status)->toBe(ReminderStatus::Cancelled)
+        ->and($rows[$waits->value]->fresh()?->status)->toBe(ReminderStatus::Pending);
+})->with([
+    'reminders' => ['reminders', ReminderKind::Reminder, ReminderKind::Escalation],
+    'escalations' => ['escalations', ReminderKind::Escalation, ReminderKind::Reminder],
+]);
