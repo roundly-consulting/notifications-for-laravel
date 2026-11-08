@@ -80,6 +80,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   of reach of `cancel('…')` and `acknowledge('…')`. Reminder filters (`pending()`, `all()`,
   `cancel()`, `sync()`, `acknowledge()`) accept a class too. A `PreferencesUpdate` (and
   `PATCH /preferences`) refuses a type that is not a key.
+- With `notifications.inbox.recheck_on_read` on, `InboxHandle::find()` treats an item whose
+  subject the reader can no longer access as not found, like the lists. So
+  `POST`/`DELETE /inbox/{item}/read|archive` and `DELETE /inbox/{item}` answer 404 for it instead
+  of changing it and rendering the live subject to a user who lost access.
 
 ## 1.0.0 - 2026-11-07
 

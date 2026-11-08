@@ -19,6 +19,7 @@ use RoundlyConsulting\Notifications\Actions\Inbox\UnarchiveInboxItemAction;
 use RoundlyConsulting\Notifications\DataTransferObjects\ContextCount;
 use RoundlyConsulting\Notifications\DataTransferObjects\InboxCounts;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
+use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Support\Access;
@@ -186,11 +187,19 @@ final readonly class InboxHandle
     }
 
     /**
-     * One of this recipient's items (another recipient's id is "not found").
+     * One of this recipient's items (another recipient's id is "not found"). With
+     * `notifications.inbox.recheck_on_read` on, an item whose subject the reader can no longer
+     * access is "not found" too, as it is hidden from the lists.
      */
     public function find(InboxItem|int|string $item): InboxItem
     {
-        return InboxQueries::find($this->recipient, $item)->loadMissing(['actor', 'subject']);
+        $found = InboxQueries::find($this->recipient, $item)->loadMissing(['actor', 'subject']);
+
+        if (NotificationsConfig::recheckOnRead() && ! $this->allowed($found)) {
+            throw InboxItemNotFoundException::notFound();
+        }
+
+        return $found;
     }
 
     public function unreadCount(): int

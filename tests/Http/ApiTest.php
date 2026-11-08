@@ -141,6 +141,31 @@ it('acknowledges the reminder an item came from', function (): void {
     $this->actingAs($manager)->postJson("/notifications/inbox/{$item->id}/acknowledge")->assertNotFound();
 });
 
+it('answers 404 on read, unread, archive and unarchive for an item the reader lost access to when recheck_on_read is on', function (string $method, string $path, bool $recheck): void {
+    config()->set('notifications.inbox.recheck_on_read', $recheck);
+    $approver = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver');
+    Notifications::send('request.awaiting_approval', $request, $approver, ['reference' => 'PR-1']);
+    $item = InboxItem::query()->sole();
+    $request->company->users()->detach($approver->id);
+
+    $response = $this->actingAs($approver)->json($method, "/notifications/inbox/{$item->id}/{$path}");
+
+    if ($recheck) {
+        $response->assertNotFound()->assertJsonPath('code', 'inbox_item_not_found');
+        expect($item->fresh()?->read_at)->toBeNull()
+            ->and($item->fresh()?->archived_at)->toBeNull();
+    } else {
+        $response->assertOk();
+    }
+})->with([
+    'read' => ['POST', 'read'],
+    'unread' => ['DELETE', 'read'],
+    'archive' => ['POST', 'archive'],
+    'unarchive' => ['DELETE', 'archive'],
+])->with(['recheck on' => [true], 'recheck off' => [false]]);
+
 it('refuses to acknowledge for a user who lost access to the subject', function (): void {
     $approver = user();
     $director = user();

@@ -65,7 +65,7 @@ final class InboxController extends Controller
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
-            $inbox->markRead($item);
+            $inbox->markRead($inbox->find($item));
 
             return $this->item($inbox->find($item), $request);
         });
@@ -75,7 +75,7 @@ final class InboxController extends Controller
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
-            $inbox->markUnread($item);
+            $inbox->markUnread($inbox->find($item));
 
             return $this->item($inbox->find($item), $request);
         });
@@ -98,7 +98,7 @@ final class InboxController extends Controller
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
-            $inbox->archive($item);
+            $inbox->archive($inbox->find($item));
 
             return $this->item($inbox->find($item), $request);
         });
@@ -108,7 +108,7 @@ final class InboxController extends Controller
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
             $inbox = $this->notifications->inbox($this->user($request));
-            $inbox->unarchive($item);
+            $inbox->unarchive($inbox->find($item));
 
             return $this->item($inbox->find($item), $request);
         });
@@ -120,7 +120,8 @@ final class InboxController extends Controller
     public function destroy(Request $request, string $item): JsonResource|JsonResponse
     {
         return $this->guarded(function () use ($request, $item): JsonResponse {
-            $this->notifications->inbox($this->user($request))->delete($item);
+            $inbox = $this->notifications->inbox($this->user($request));
+            $inbox->delete($inbox->find($item));
 
             return new JsonResponse(null, 204);
         });
