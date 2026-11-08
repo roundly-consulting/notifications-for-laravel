@@ -291,6 +291,33 @@ it('retries a transport failure with backoff, then fails it', function (): void 
     Event::assertDispatched(NotificationMailFailed::class, fn (NotificationMailFailed $e): bool => $e->reason === CancelReason::Transport);
 });
 
+it('does not count a quiet-hours hold as a transport attempt', function (): void {
+    config()->set('notifications.mail.strategy', 'trailing');
+    [$request, $approver] = mailSetup();
+    Notifications::send('request.awaiting_approval', $request, $approver, ['reference' => 'A']);
+    Notifications::preferences($approver)->quietHours('10:03', '11:00');
+    failingMail();
+
+    at('2026-11-09 10:05:00');
+    Notifications::sweep();
+    expect(delivery()->status)->toBe(DeliveryStatus::Held)
+        ->and(delivery()->attempts)->toBe(0);
+
+    at('2026-11-09 11:00:00');
+    Notifications::sweep();
+    expect(delivery()->status)->toBe(DeliveryStatus::Pending)
+        ->and(delivery()->attempts)->toBe(1)
+        ->and(delivery()->send_after->format('H:i:s'))->toBe('11:01:00');
+
+    at('2026-11-09 11:01:00');
+    Notifications::sweep();
+    at('2026-11-09 11:06:00');
+    Notifications::sweep();
+
+    expect(delivery()->status)->toBe(DeliveryStatus::Failed)
+        ->and(delivery()->attempts)->toBe(3);
+});
+
 it('fails a mail whose type cannot render, without retrying', function (): void {
     Notifications::define('broken.render')->title(fn (): string => 'ok')->body(fn (): string => throw new RuntimeException('render'))->register();
 

@@ -65,11 +65,16 @@ final class DeliveryStates
         }
     }
 
+    /**
+     * A claim that ends in a quiet-hours hold gives its attempt back: attempts count transport
+     * tries (`mail.max_attempts`, the backoff index), not holds.
+     */
     public static function hold(NotificationDelivery $delivery, CarbonImmutable $until): void
     {
         if (self::transition($delivery, DeliveryStatus::Sending, [
             'status' => DeliveryStatus::Held->value,
             'send_after' => $until->format(Clock::FORMAT),
+            'attempts' => max(0, $delivery->attempts - 1),
         ])) {
             Event::dispatch(new NotificationMailHeld($delivery->refresh(), $until));
         }

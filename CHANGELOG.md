@@ -84,6 +84,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   subject the reader can no longer access as not found, like the lists. So
   `POST`/`DELETE /inbox/{item}/read|archive` and `DELETE /inbox/{item}` answer 404 for it instead
   of changing it and rendering the live subject to a user who lost access.
+- A mail held for quiet hours at delivery time no longer uses up a delivery attempt, so it still
+  gets every transport try of `notifications.mail.max_attempts`, with the backoff starting at the
+  first step.
 
 ## 1.0.0 - 2026-11-07
 
