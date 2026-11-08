@@ -20,11 +20,15 @@ use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Handles\InboxHandle;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients;
+use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
+use RoundlyConsulting\Notifications\Traits\HasNotificationReminders;
+use RoundlyConsulting\Notifications\Traits\IsNotificationSubject;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Testing\Fixtures\LockRecorder;
 use RoundlyConsulting\Testing\Fixtures\LockRecordingGrammar;
@@ -421,6 +425,21 @@ it('archives or deletes items when their subject is deleted, as configured', fun
     'archive' => ['archive', 0, 1],
     'delete' => ['delete', 0, 0],
 ]);
+
+it('archives inbox items of a deleted subject that uses IsNotificationSubject', function (): void {
+    config()->set('notifications.inbox.on_subject_deleted', 'archive');
+    $reader = user();
+    $post = post();
+    Notifications::send('comment.posted', $post, $reader, ['title' => 'x']);
+    Notifications::for($post)->remind('comment.posted', Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: $reader);
+
+    $post->delete();
+
+    expect(class_uses($post))->toContain(IsNotificationSubject::class)->not->toContain(HasNotificationReminders::class)
+        ->and(Notifications::inbox($reader)->get())->toHaveCount(0)
+        ->and(Notifications::inbox($reader)->archived()->get())->toHaveCount(1)
+        ->and(NotificationReminder::query()->where('status', 'pending')->count())->toBe(0);
+});
 
 it('composes ReceivesNotifications with Laravel\'s Notifiable (C-60)', function (): void {
     $user = user();

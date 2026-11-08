@@ -20,6 +20,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `assertNotRecorded()` for the rest (digests, deliveries, reminder fires, backfills).
 - `assertNotSent()` takes `to:` and `about:`, and `assertSent()` / `assertNotSent()` accept a type
   class as well as its key.
+- `Traits\IsNotificationSubject`: the delete hook alone, for subjects without reminder rules. A
+  deleted subject's inbox items follow `notifications.inbox.on_subject_deleted` and its pending
+  ad-hoc reminders are cancelled. `HasNotificationReminders` now uses it.
 - `NotificationOperation::SubjectDeleted`, recorded for the inbox cleanup of
   `notifications.inbox.on_subject_deleted`.
 

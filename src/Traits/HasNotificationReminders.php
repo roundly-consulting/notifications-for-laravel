@@ -14,18 +14,20 @@ use RoundlyConsulting\Notifications\Support\SubjectLifecycle;
 /**
  * Makes a model a reminder subject: reminders of every type whose subject() is this class follow
  * their date attributes (synced after the commit on create, on a changed anchor and on restore)
- * and are cancelled when the model is deleted. It is also the subject-lifecycle hook for
- * `notifications.inbox.on_subject_deleted`. Every call goes through the manager.
+ * and are cancelled when the model is deleted. Through IsNotificationSubject it is also the
+ * subject-lifecycle hook for `notifications.inbox.on_subject_deleted`. Every call goes through the
+ * manager.
  *
  * @phpstan-require-extends Model
  */
 trait HasNotificationReminders
 {
+    use IsNotificationSubject;
+
     public static function bootHasNotificationReminders(): void
     {
         static::created(static fn (Model $subject) => SubjectLifecycle::saved($subject, created: true));
         static::updated(static fn (Model $subject) => SubjectLifecycle::saved($subject, created: false));
-        static::deleted(static fn (Model $subject) => SubjectLifecycle::deleted($subject));
 
         // Fires only for soft-deleting models.
         static::registerModelEvent('restored', static fn (Model $subject) => SubjectLifecycle::saved($subject, created: true));
