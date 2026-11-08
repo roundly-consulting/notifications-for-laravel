@@ -9,6 +9,9 @@ use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
+use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
+use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationSubjectException;
+use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationTypeException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Mail\InboxMessage;
 use RoundlyConsulting\Notifications\Models\InboxItem;
@@ -241,3 +244,17 @@ it('passes the nothing-assertions on an untouched fake', function (): void {
     $fake->assertNoRemindersScheduled();
     $fake->assertNotRecorded(NotificationOperation::Send);
 });
+
+it('throws under the fake what the real send throws at the call site', function (Closure $send, string $exception): void {
+    $fake = Notifications::fake();
+
+    expect(fn () => $send())->toThrow($exception);
+
+    expect($fake->recorded())->toBe([]);
+    $fake->assertNothingSent();
+})->with([
+    'unknown type' => [fn () => Notifications::send('no.such.type', null, user()), UnknownNotificationTypeException::class],
+    'wrong subject class' => [fn () => Notifications::send('request.awaiting_approval', post(), user()), InvalidNotificationSubjectException::class],
+    'non-JSON data' => [fn () => Notifications::send('security.alert', null, user(), ['at' => new DateTimeImmutable]), InvalidNotificationDataException::class],
+    'escalation without a subject' => [fn () => Notifications::type('security.alert')->to(user())->escalate('P1D', user())->send(), InvalidNotificationSubjectException::class],
+]);

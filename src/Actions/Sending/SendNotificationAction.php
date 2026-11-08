@@ -9,19 +9,16 @@ use RoundlyConsulting\Notifications\DataTransferObjects\RecipientOutcome;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
 use RoundlyConsulting\Notifications\Enums\InboxOutcome;
-use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationSubjectException;
 use RoundlyConsulting\Notifications\Jobs\DeliverToRecipientsJob;
 use RoundlyConsulting\Notifications\NotificationType;
 use RoundlyConsulting\Notifications\Support\Clock;
-use RoundlyConsulting\Notifications\Support\Contexts;
 use RoundlyConsulting\Notifications\Support\Escalations;
-use RoundlyConsulting\Notifications\Support\KeyTypes;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
-use RoundlyConsulting\Notifications\Support\Payloads;
 use RoundlyConsulting\Notifications\Support\PreparedSend;
 use RoundlyConsulting\Notifications\Support\Queues;
 use RoundlyConsulting\Notifications\Support\Receipts;
+use RoundlyConsulting\Notifications\Support\SendValidation;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
@@ -39,35 +36,9 @@ final readonly class SendNotificationAction
 
     public function execute(SendNotificationData $data): SendResult
     {
-        $type = $this->types->find($data->type);
+        $validated = SendValidation::validate($data, $this->types);
+        [$type, $payload, $context] = [$validated->type, $validated->data, $validated->context];
         $subject = $data->subject;
-        $expected = $type->subject();
-
-        if ($subject !== null) {
-            if ($expected === null) {
-                throw InvalidNotificationSubjectException::unexpected($type->key(), class_basename($subject));
-            }
-
-            if (! $subject instanceof $expected) {
-                throw InvalidNotificationSubjectException::wrongClass($type->key(), class_basename($expected), class_basename($subject));
-            }
-        }
-
-        if ($data->escalations !== [] && $subject === null) {
-            throw InvalidNotificationSubjectException::required($type->key());
-        }
-
-        $payload = Payloads::assertJson($data->data);
-
-        KeyTypes::assert($subject, 'subject');
-        KeyTypes::assert($data->actor, 'actor');
-
-        $context = Contexts::resolve($data->context ?? $type->context($subject));
-
-        // Stored escalation recipients must survive a JSON round trip: refuse closures up front.
-        foreach ($data->escalations as $escalation) {
-            Escalations::storedRecipients($escalation->to);
-        }
 
         $recipients = $this->resolveRecipients->execute($type, $data->recipients, $subject, $data->actor);
 

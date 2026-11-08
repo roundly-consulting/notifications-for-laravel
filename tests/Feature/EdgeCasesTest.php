@@ -440,12 +440,11 @@ it('records the fake\'s context helpers', function (): void {
         ->and($op->concerns(user(), 'subject'))->toBeFalse();
 
     $fake = Notifications::fake();
-    Notifications::send('gone.type', null, user());
+    // An unknown type throws like the real send (C-7); recipients that cannot resolve record none.
     Notifications::send('request.awaiting_approval', null, Recipients::owner());
 
-    expect($fake->recorded())->toHaveCount(2)
-        ->and($fake->recorded()[0]->recipients)->toBe([])
-        ->and($fake->recorded()[1]->recipients)->toBe([]);
+    expect($fake->recorded())->toHaveCount(1)
+        ->and($fake->recorded()[0]->recipients)->toBe([]);
 });
 
 it('keeps a type\'s default hooks', function (): void {

@@ -14,6 +14,7 @@ use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
 use RoundlyConsulting\Notifications\NotificationsManager;
+use RoundlyConsulting\Notifications\Support\SendValidation;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use Throwable;
 
@@ -62,7 +63,8 @@ final class NotificationsFake extends NotificationsManager
             return $this->passthrough ? parent::perform($operation, $action, $execute, $context) : null;
         }
 
-        $this->recorded[] = $this->record($operation, $context);
+        $recorded = $this->record($operation, $context);     // may throw what the real send throws
+        $this->recorded[] = $recorded;
 
         return $this->passthrough ? parent::perform($operation, $action, $execute, $context) : null;
     }
@@ -464,18 +466,15 @@ final class NotificationsFake extends NotificationsManager
             return new RecordedOperation($operation, $context);
         }
 
-        $registry = $this->container()->make(TypeRegistry::class);
-        $type = $registry->get($data->type);
-        $recipients = [];
+        // The real send's up-front checks: a send that would throw in production throws here too.
+        $type = SendValidation::validate($data, $this->container()->make(TypeRegistry::class))->type;
 
-        if ($type !== null) {
-            try {
-                $recipients = $this->container()->make(ResolveRecipientsAction::class)->execute($type, $data->recipients, $data->subject, $data->actor);
-            } catch (Throwable) {
-                $recipients = [];
-            }
+        try {
+            $recipients = $this->container()->make(ResolveRecipientsAction::class)->execute($type, $data->recipients, $data->subject, $data->actor);
+        } catch (Throwable) {
+            $recipients = [];
         }
 
-        return new RecordedOperation($operation, $context, $recipients, $type?->key() ?? $data->type, $data->subject);
+        return new RecordedOperation($operation, $context, $recipients, $type->key(), $data->subject);
     }
 }

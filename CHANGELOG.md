@@ -102,6 +102,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `SoftDeletes`, so a request-bound scope (tenancy) cancelled their queued mail as `subject_gone`
   while a soft-deleting subject went through. Soft-deleted subjects are still refused unless the
   type allows them, and access is still the type's check.
+- Under `Notifications::fake()`, a send the real pipeline refuses up front throws the same
+  exception instead of being recorded: an unknown type, a subject of the wrong class, data that is
+  not plain JSON, an escalation without a subject (also bad keys, contexts and unstorable
+  escalation recipients). A green test no longer hides a production exception.
 
 ## 1.0.0 - 2026-11-07
 
