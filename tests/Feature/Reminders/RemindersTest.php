@@ -870,3 +870,38 @@ it('keeps every offset of a keyed ad-hoc reminder', function (): void {
 
     expect($adHoc())->toHaveCount(3);
 });
+
+it('does not leave an orphan that fires twice when remind() replaces a firing row', function (): void {
+    $contract = expiringContract();
+    $owner = $contract->owner;
+    $remind = fn (string $at) => Notifications::for($contract)->remind('contract.expiring', Reminder::at(CarbonImmutable::parse($at, 'UTC'))->key('follow-up'), to: $owner);
+    $pending = fn () => NotificationReminder::query()->where('rule', 'adhoc:follow-up')->where('status', ReminderStatus::Pending->value);
+
+    [$first] = $remind('2026-11-09 12:00:00');
+    $first->forceFill(['status' => ReminderStatus::Firing])->save();     // the sweep is firing it
+
+    $remind('2026-11-10 10:00:00');
+    $remind('2026-11-10 11:00:00');
+    expect($pending()->count())->toBe(1);
+
+    $first->forceFill(['status' => ReminderStatus::Sent, 'active_key' => null])->save();   // the fire closes it
+    $remind('2026-11-11 10:00:00');
+
+    expect($pending()->count())->toBe(1)
+        ->and($pending()->sole()->active_key)->not->toBeNull()
+        ->and($pending()->sole()->due_at->format('Y-m-d H:i'))->toBe('2026-11-11 10:00');
+});
+
+it('does not leave an orphan when schedule() runs during a fire of the same offset', function (): void {
+    Notifications::define('task.due')->subject(Contract::class)->reminders(Reminder::before('expires_at', 'P1D'))->title(fn (): string => 'Due')->register();
+    $contract = expiringContract();
+    $pending = fn () => NotificationReminder::query()->where('type', 'task.due')->where('status', ReminderStatus::Pending->value);
+
+    [$first] = Notifications::for($contract)->reminders()->schedule('task.due', to: $contract->owner);
+    $first->forceFill(['status' => ReminderStatus::Firing])->save();
+    Notifications::for($contract)->reminders()->schedule('task.due', to: $contract->owner);
+    $first->forceFill(['status' => ReminderStatus::Sent, 'active_key' => null])->save();
+    Notifications::for($contract)->reminders()->schedule('task.due', to: $contract->owner);
+
+    expect($pending()->count())->toBe(1);
+});

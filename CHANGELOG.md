@@ -35,6 +35,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   subject.
 - `remind()` with `->key()` and several offsets keeps a row per offset (a repeat call replaces
   each one). Each offset replaced the previous one, so only the last offset was ever sent.
+- `remind()` or `schedule()` while the same reminder is being fired no longer leaves a second
+  pending row behind: the waiting row is replaced by later calls and takes over the key once the
+  fire closes. The reminder used to fire twice.
 
 ## 1.1.0 - 2026-11-08
 

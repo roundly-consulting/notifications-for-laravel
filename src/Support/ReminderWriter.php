@@ -43,23 +43,52 @@ final class ReminderWriter
         $class = NotificationModels::reminder();
         $key = Keys::reminder(ModelRefs::identity($subject), $type, $rule, $keyedByOffset ? $offset : null);
 
-        return $class::query()->getConnection()->transaction(static function () use ($class, $key, $subject, $type, $rule, $anchor, $offset, $anchorValue, $due, $recipients, $data): NotificationReminder {
+        return $class::query()->getConnection()->transaction(static function () use ($class, $key, $subject, $type, $rule, $anchor, $offset, $anchorValue, $due, $recipients, $data, $keyedByOffset): NotificationReminder {
             for ($attempt = 1; ; $attempt++) {
                 $existing = $class::query()->where('active_key', $key)->lockForUpdate()->first();
+                $values = [
+                    'anchor' => $anchor,
+                    'offset' => $offset,
+                    'due_at' => $due,
+                    'anchor_value' => $anchorValue,
+                    'recipients' => $recipients,
+                    'data' => $data,
+                ];
 
                 if ($existing !== null && $existing->status === ReminderStatus::Pending) {
-                    $existing->forceFill([
-                        'anchor' => $anchor,
-                        'offset' => $offset,
-                        'due_at' => $due,
-                        'anchor_value' => $anchorValue,
-                        'recipients' => $recipients,
-                        'data' => $data,
-                    ])->save();
+                    $existing->forceFill($values)->save();
 
                     Event::dispatch(new ReminderRescheduled($existing));
 
                     return $existing;
+                }
+
+                // A row written while the keyed one was firing waits without the key. Replace it
+                // instead of adding another, and give it the key once the firing row has closed,
+                // so the reminder never exists (and fires) twice.
+                $waiting = ReminderRows::forSubject($subject, $type)
+                    ->where('kind', ReminderKind::Reminder->value)
+                    ->where('rule', $rule)
+                    ->when($keyedByOffset, static fn ($query) => $query->where('offset', $offset))
+                    ->where('status', ReminderStatus::Pending->value)
+                    ->whereNull('active_key')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($waiting !== null) {
+                    try {
+                        $waiting->getConnection()->transaction(static fn (): bool => $waiting->forceFill($values + ['active_key' => $existing === null ? $key : null])->save());
+                    } catch (UniqueConstraintViolationException $exception) {
+                        if ($attempt >= 3) {
+                            throw $exception;
+                        }
+
+                        continue;
+                    }
+
+                    Event::dispatch(new ReminderRescheduled($waiting));
+
+                    return $waiting;
                 }
 
                 $row = new $class;
