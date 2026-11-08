@@ -35,6 +35,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - Performance: with `notifications.inbox.recheck_on_read` on, reading the inbox reuses the
   subjects the query already loaded instead of reading each one again (10 items: 2 queries instead
   of 12).
+- Performance: `InboxHandle::counts()` reads every context's label in one query instead of one
+  query per context.
 - Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
 
 ### Fixed

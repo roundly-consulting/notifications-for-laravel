@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -259,6 +260,30 @@ it('counts unread per context with the newest label', function (): void {
             'billing' => ['Billing', 1],
             'company:'.$request->company_id => ['Acme s.r.o.', 1],
         ]);
+});
+
+it('counts contexts in a fixed number of queries', function (): void {
+    $queries = function (int $contexts): int {
+        $user = user();
+
+        foreach (range(1, $contexts) as $n) {
+            Notifications::send('security.alert', null, $user, context: Context::key("team:{$n}", "Team {$n}"));
+            at(CarbonImmutable::now('UTC')->addSecond()->toDateTimeString());
+            Notifications::send('security.alert', null, $user, context: Context::key("team:{$n}", "Team {$n} renamed"));
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $counts = Notifications::inbox($user)->counts();
+        DB::disableQueryLog();
+
+        expect(collect($counts->contexts)->mapWithKeys(fn ($c) => [$c->key => [$c->label, $c->unread]])->all())
+            ->toBe(collect(range(1, $contexts))->mapWithKeys(fn (int $n) => ["team:{$n}" => ["Team {$n} renamed", 2]])->all());
+
+        return count(DB::getQueryLog());
+    };
+
+    expect($queries(3))->toBe($queries(1));
 });
 
 it('treats another user\'s item as not found (C-32)', function (Closure $call): void {

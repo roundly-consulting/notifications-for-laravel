@@ -211,17 +211,21 @@ final readonly class InboxHandle
             ->toBase()
             ->get();
 
-        $contexts = [];
+        $counts = [];
 
         foreach ($groups as $group) {
             $key = property_exists($group, 'context_key') && is_string($group->context_key) ? $group->context_key : null;
 
-            if ($key === null) {
-                continue;
+            if ($key !== null) {
+                $counts[$key] = property_exists($group, 'unread_count') && is_numeric($group->unread_count) ? (int) $group->unread_count : 0;
             }
+        }
 
-            $count = property_exists($group, 'unread_count') && is_numeric($group->unread_count) ? (int) $group->unread_count : 0;
-            $contexts[] = new ContextCount($key, $this->label($key), $count);
+        $labels = $this->labels(array_keys($counts));
+        $contexts = [];
+
+        foreach ($counts as $key => $count) {
+            $contexts[] = new ContextCount($key, $labels[$key] ?? $key, $count);
         }
 
         return new InboxCounts($unread, $total, $contexts);
@@ -397,14 +401,35 @@ final readonly class InboxHandle
         return Access::allows($type, $this->recipient, $subject, true);
     }
 
-    private function label(string $key): string
+    /**
+     * The newest label of each context key, in one query.
+     *
+     * @param  list<string>  $keys
+     * @return array<string, string|null>
+     */
+    private function labels(array $keys): array
     {
-        $label = InboxQueries::for($this->recipient)
-            ->where('context_key', $key)
-            ->orderByDesc('last_event_at')
-            ->value('context_label');
+        if ($keys === []) {
+            return [];
+        }
 
-        return is_string($label) ? $label : $key;
+        $labels = [];
+        $rows = InboxQueries::for($this->recipient)
+            ->whereIn('context_key', $keys)
+            ->orderByDesc('last_event_at')
+            ->orderByDesc('id')
+            ->toBase()
+            ->get(['context_key', 'context_label']);
+
+        foreach ($rows as $row) {
+            $key = property_exists($row, 'context_key') && is_string($row->context_key) ? $row->context_key : null;
+
+            if ($key !== null && ! array_key_exists($key, $labels)) {
+                $labels[$key] = property_exists($row, 'context_label') && is_string($row->context_label) ? $row->context_label : null;
+            }
+        }
+
+        return $labels;
     }
 
     /**
