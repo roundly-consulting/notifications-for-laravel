@@ -9,7 +9,9 @@ use RoundlyConsulting\Notifications\NotificationType;
 
 /**
  * Re-reads a subject before an access check: gone (deleted, or soft-deleted unless the type
- * allows it) is null.
+ * allows it) is null. Every re-read ignores the host's global scopes, like `fresh()` (the send
+ * hop) and Laravel's queue restoration — one rule at every hop; who may see the subject is the
+ * type's access check.
  *
  * @internal
  */
@@ -26,7 +28,7 @@ final class Subjects
 
     public static function find(NotificationType $type, ?string $morphType, int|string|null $id): ?Model
     {
-        return self::present($type, ModelRefs::find($morphType, $id, withTrashed: true));
+        return self::present($type, ModelRefs::find($morphType, $id, unscoped: true));
     }
 
     /**

@@ -96,6 +96,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   (it was 3 March), and a year after 29 February is 28 February.
 - `notifications:sweep --only=reminders` fires only reminders and `--only=escalations` only
   escalations; either one fired both.
+- Stored subjects are re-read the same way at every hop (queued fan-out, mail, digests, reminders,
+  escalations, acknowledgements, `recheck_on_read`): no host global scope applies, for any model,
+  as with `Model::fresh()` at send time. A scope used to apply only to subjects without
+  `SoftDeletes`, so a request-bound scope (tenancy) cancelled their queued mail as `subject_gone`
+  while a soft-deleting subject went through. Soft-deleted subjects are still refused unless the
+  type allows them, and access is still the type's check.
 
 ## 1.0.0 - 2026-11-07
 

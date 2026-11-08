@@ -33,6 +33,7 @@ use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationTypeException;
 use RoundlyConsulting\Notifications\Exceptions\NoOwnerException;
 use RoundlyConsulting\Notifications\Exceptions\UnstorableRecipientsException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
+use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\DigestRun;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
@@ -57,6 +58,7 @@ use RoundlyConsulting\Notifications\Testing\NotificationExpectations;
 use RoundlyConsulting\Notifications\Testing\RecordedOperation;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Notifications\VendorThingHappened;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Resolvers\ThrowingResolver;
@@ -556,4 +558,33 @@ it('rethrows after three lost unique races', function (string $model, Closure $w
         Notifications::send('mail.only', null, user());
     }],
     'reminder' => [NotificationReminder::class, fn () => Notifications::for(post())->remind('comment.posted', Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: user())],
+]);
+
+it('treats host global scopes the same on every hop', function (string $class, Closure $subject): void {
+    config()->set('notifications.mail.strategy', 'trailing');
+    Notifications::define('scoped.thing')->subject($class)->window('PT5M')->access(fn (): bool => true)->title(fn (): string => 'Scoped')->register();
+    $reader = user();
+    $model = $subject();
+
+    Notifications::send('scoped.thing', $model, $reader);
+
+    // A scope that only holds inside a request (a tenant scope with no tenant in a worker).
+    $class::addGlobalScope('outside_the_request', fn ($query) => $query->whereRaw('1 = 0'));
+
+    try {
+        at('2026-11-09 10:06:00');
+        Notifications::sweep();
+
+        expect(NotificationDelivery::query()->sole()->status)->toBe(DeliveryStatus::Sent)
+            ->and(NotificationDelivery::query()->sole()->cancel_reason)->toBeNull();
+        Notification::assertSentTo($reader, TypedMailNotification::class);
+
+        config()->set('notifications.inbox.recheck_on_read', true);
+        expect(Notifications::inbox($reader)->get())->toHaveCount(1);
+    } finally {
+        Model::clearBootedModels();
+    }
+})->with([
+    'a soft-deleting subject' => [Contract::class, fn () => contract()],
+    'a plain subject' => [PurchaseRequest::class, fn () => purchaseRequest()],
 ]);

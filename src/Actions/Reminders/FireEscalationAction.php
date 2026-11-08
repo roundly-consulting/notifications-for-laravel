@@ -213,7 +213,7 @@ final readonly class FireEscalationAction
 
     private function armNextSendLevel(NotificationReminder $row, EscalationRule $next, CarbonImmutable $now): void
     {
-        $subject = ModelRefs::find($row->subject_type, $row->subject_id, withTrashed: true);
+        $subject = ModelRefs::find($row->subject_type, $row->subject_id, unscoped: true);
 
         if ($subject === null) {
             return;

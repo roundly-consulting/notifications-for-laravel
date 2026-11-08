@@ -6,7 +6,6 @@ namespace RoundlyConsulting\Notifications\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Stored model references (`{type, id}`, the morph type) for queued payloads, stored recipient
@@ -59,9 +58,12 @@ final class ModelRefs
     }
 
     /**
-     * The referenced model, or null when it is gone (soft-deleted ones too unless `$withTrashed`).
+     * The referenced model, or null when it is gone. `$unscoped` re-reads a stored subject the way
+     * `Model::fresh()` and Laravel's queue restoration do: no global scope of any model applies
+     * (soft deletes, tenancy, …), so a subject reads the same at every hop; the caller checks
+     * trashed rows itself and access stays with the Gate.
      */
-    public static function find(?string $type, int|string|null $id, bool $withTrashed = false): ?Model
+    public static function find(?string $type, int|string|null $id, bool $unscoped = false): ?Model
     {
         if ($type === null || $id === null) {
             return null;
@@ -73,11 +75,7 @@ final class ModelRefs
             return null;
         }
 
-        $query = $class::query();
-
-        if ($withTrashed && in_array(SoftDeletes::class, class_uses_recursive($class), true)) {
-            $query->withoutGlobalScopes();
-        }
+        $query = $unscoped ? (new $class)->newQueryWithoutScopes() : $class::query();
 
         return $query->whereKey($id)->first();
     }

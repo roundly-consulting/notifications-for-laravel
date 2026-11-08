@@ -400,12 +400,11 @@ final readonly class InboxHandle
 
         $loaded = $item->subject;
 
-        if ($loaded instanceof Model) {
-            $subject = Subjects::visible($type, $loaded);
-        } else {
-            // The eager load's default scope skips soft-deleted subjects; gone otherwise.
-            $subject = $type->allowsTrashedSubject() ? Subjects::find($type, $item->subject_type, $item->subject_id) : null;
-        }
+        // The eager load applies the host's global scopes (soft deletes included); a subject it
+        // could not see is re-read without them, like every other hop.
+        $subject = $loaded instanceof Model
+            ? Subjects::visible($type, $loaded)
+            : Subjects::find($type, $item->subject_type, $item->subject_id);
 
         return Access::allows($type, $this->recipient, $subject, true);
     }
