@@ -36,22 +36,44 @@ final class Receipts
         return $class::query()->insertOrIgnore($attributes) > 0;
     }
 
+    /** Ids per query: a bounded number of placeholders on every engine. */
+    private const int CHUNK = 1000;
+
     /**
-     * Whether this key already reached every one of these recipients (a replay).
+     * Whether this key already reached every one of these recipients (a replay). One query per
+     * morph type and 1 000 recipients, after one cheap check that the key reached anyone at all.
      *
      * @param  list<Model>  $recipients  the fan-out batch (never empty)
      */
     public static function reachedAll(string $idempotencyKey, array $recipients): bool
     {
-        $reached = NotificationModels::receipt()::query()
-            ->where('key', Keys::receipt($idempotencyKey))
-            ->where(static function ($query) use ($recipients): void {
-                foreach ($recipients as $recipient) {
-                    $query->orWhere(static fn ($pair) => $pair->where('recipient_type', $recipient->getMorphClass())->where('recipient_id', $recipient->getKey()));
-                }
-            })
-            ->count();
+        $class = NotificationModels::receipt();
+        $key = Keys::receipt($idempotencyKey);
 
-        return $reached >= count($recipients);
+        if (! $class::query()->where('key', $key)->exists()) {
+            return false;
+        }
+
+        $byType = [];
+
+        foreach ($recipients as $recipient) {
+            $byType[$recipient->getMorphClass()][] = $recipient->getKey();
+        }
+
+        foreach ($byType as $type => $ids) {
+            foreach (array_chunk(array_values(array_unique($ids)), self::CHUNK) as $chunk) {
+                $reached = $class::query()
+                    ->where('key', $key)
+                    ->where('recipient_type', $type)
+                    ->whereIn('recipient_id', $chunk)
+                    ->count();
+
+                if ($reached < count($chunk)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 }

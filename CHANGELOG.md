@@ -21,6 +21,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   hop. A soft-deleted subject (unless the type allows it) or one that changed since the caller
   loaded it got an inbox item and mail inline, while the same send through a fan-out delivered
   nothing. Now both answer `no_access`.
+- A keyed (`once()`) fan-out to many recipients no longer throws before anything is queued. The
+  replay check built one condition per recipient, which broke SQLite at about 1 000 recipients
+  and MySQL/PostgreSQL at 32 768; it now checks in chunks of 1 000 per morph type.
 
 ## 1.1.0 - 2026-11-08
 

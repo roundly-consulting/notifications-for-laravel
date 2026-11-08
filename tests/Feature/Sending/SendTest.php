@@ -26,10 +26,13 @@ use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Jobs\DeliverToRecipientsJob;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\Models\NotificationReceipt;
+use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
 use RoundlyConsulting\Notifications\Reminders\Reminder;
+use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
@@ -360,4 +363,28 @@ it('checks access on the current subject, not a stale model', function (): void 
 
     expect($result->outcomes[0]->inbox)->toBe(InboxOutcome::NoAccess)
         ->and(InboxItem::query()->count())->toBe(0);
+});
+
+it('checks a keyed fan-out to many recipients within the bind limits', function (): void {
+    Queue::fake();
+    $request = purchaseRequest();
+    $now = CarbonImmutable::now('UTC')->format('Y-m-d H:i:s');
+    User::query()->insert(array_map(static fn (int $n): array => ['name' => "Bulk {$n}", 'email' => "bulk{$n}@example.test"], range(1, 1500)));
+    $users = User::query()->where('name', 'like', 'Bulk %')->get()->all();
+    $send = fn () => Notifications::type('request.awaiting_approval')->about($request)->to($users)->with(['reference' => 'PR'])
+        ->once('maintenance:2026-11')->escalate('P1D', user())->send();
+    $escalations = fn () => NotificationReminder::query()->count();
+
+    expect($send()->queued)->toBe(1500)
+        ->and($escalations())->toBe(1);
+
+    NotificationReminder::query()->forceDelete();
+    foreach (array_chunk($users, 500) as $chunk) {
+        NotificationReceipt::query()->insert(array_map(static fn (User $user): array => [
+            'key' => Keys::receipt('maintenance:2026-11'), 'recipient_type' => $user->getMorphClass(), 'recipient_id' => $user->id, 'created_at' => $now,
+        ], $chunk));
+    }
+
+    expect($send()->queued)->toBe(1500)
+        ->and($escalations())->toBe(0);
 });
