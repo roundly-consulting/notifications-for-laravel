@@ -57,7 +57,7 @@ final class Receipts
         $byType = [];
 
         foreach ($recipients as $recipient) {
-            $byType[$recipient->getMorphClass()][] = $recipient->getKey();
+            $byType[$recipient->getMorphClass()][] = ModelRefs::key($recipient);
         }
 
         foreach ($byType as $type => $ids) {
