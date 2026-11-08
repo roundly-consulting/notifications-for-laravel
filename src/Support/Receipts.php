@@ -39,14 +39,10 @@ final class Receipts
     /**
      * Whether this key already reached every one of these recipients (a replay).
      *
-     * @param  list<Model>  $recipients
+     * @param  list<Model>  $recipients  the fan-out batch (never empty)
      */
     public static function reachedAll(string $idempotencyKey, array $recipients): bool
     {
-        if ($recipients === []) {
-            return false;
-        }
-
         $reached = NotificationModels::receipt()::query()
             ->where('key', Keys::receipt($idempotencyKey))
             ->where(static function ($query) use ($recipients): void {
