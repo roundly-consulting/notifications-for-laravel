@@ -252,6 +252,30 @@ it('escalates to the managers when nobody acknowledged (C-58), and not after an 
         ->and(NotificationReminder::query()->whereNotNull('acknowledged_at')->first()->acknowledger_id)->toBe($contract->owner_id);
 });
 
+it('escalates a later offset even after an earlier one was acknowledged', function (): void {
+    $contract = expiringContract();
+    $manager = $contract->company->users()->wherePivot('role', 'manager')->sole();
+
+    at('2026-12-19 10:00:00');
+    Notifications::sweep();
+    at('2026-12-22 10:00:00');
+    Notifications::sweep();                                                          // -P60D escalates
+    at('2027-01-18 10:00:00');
+    Notifications::sweep();                                                          // -P30D fires
+    Notifications::for($contract)->acknowledge('contract.expiring', by: $contract->owner);
+
+    $sevenDays = NotificationReminder::query()->where('kind', ReminderKind::Reminder->value)->where('offset', '-P7D')->sole();
+    expect($sevenDays->status)->toBe(ReminderStatus::Pending)
+        ->and($sevenDays->acknowledged_at)->toBeNull();
+
+    at('2027-02-10 10:00:00');
+    Notifications::sweep();                                                          // -P7D fires, arms its escalation
+    at('2027-02-13 10:00:00');
+    Notifications::sweep();
+
+    Notification::assertSentToTimes($manager, TypedMailNotification::class, 2);
+});
+
 it('re-arms sent reminders when a renewal moves the date later (C-59)', function (): void {
     $contract = expiringContract('2026-12-25 10:00:00');
 

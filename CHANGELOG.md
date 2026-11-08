@@ -63,6 +63,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - Under `Notifications::fake()`, deleting a subject no longer archives or deletes its inbox items
   (`notifications.inbox.on_subject_deleted`). The cleanup now runs through the manager, so the fake
   records it like every other write.
+- Acknowledging a subject no longer silences its later reminders' escalations. It stamped the
+  pending later offsets too, so when one fired, its escalation was cancelled as acknowledged and
+  the managers were never told. Only reminders that already went out are stamped now.
 
 ## 1.0.0 - 2026-11-07
 

@@ -13,8 +13,8 @@ use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\ReminderRows;
 
 /**
- * Acknowledges a subject's reminders and escalations (of one type, or all): stamps them and
- * cancels the pending escalation rows. Later reminder offsets still fire — an acknowledged
+ * Acknowledges a subject's reminders and escalations (of one type, or all): stamps the ones that
+ * fired (or are firing) and cancels the pending escalation rows. Later reminder offsets still fire — an acknowledged
  * 30-day reminder does not silence the 7-day one.
  */
 final readonly class AcknowledgeAction
@@ -26,7 +26,9 @@ final readonly class AcknowledgeAction
 
             ReminderRows::forSubject($subject, $type)
                 ->whereNull('acknowledged_at')
-                ->whereIn('status', [ReminderStatus::Pending->value, ReminderStatus::Firing->value, ReminderStatus::Sent->value])
+                // Only what already went out: a pending later offset stays unacknowledged, or the
+                // escalation it arms when it fires would be cancelled as acknowledged.
+                ->whereIn('status', [ReminderStatus::Firing->value, ReminderStatus::Sent->value])
                 ->update([
                     'acknowledged_at' => $now->format(Clock::FORMAT),
                     'acknowledger_type' => $by?->getMorphClass(),
