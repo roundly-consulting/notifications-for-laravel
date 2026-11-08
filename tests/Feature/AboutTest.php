@@ -48,3 +48,12 @@ it('uses the defaults when a key is blank', function (?string $value): void {
 
     expect(Artisan::output())->toContain('ON (connection')->toContain('bigint');
 })->with(['null' => [null], 'empty env' => [''], 'whitespace' => ['  ']]);
+
+it('lists the context key type in about', function (): void {
+    expect('notifications')->toLeakNoSecrets(secrets: [], mustRender: ['Context key type', 'bigint']);
+
+    config()->set('notifications.context_key_type', 'ulid');
+    Artisan::call('about', ['--only' => 'notifications']);
+
+    expect(Artisan::output())->toMatch('/Context key type\W+ulid/');
+});

@@ -23,6 +23,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - `Traits\IsNotificationSubject`: the delete hook alone, for subjects without reminder rules. A
   deleted subject's inbox items follow `notifications.inbox.on_subject_deleted` and its pending
   ad-hoc reminders are cancelled. `HasNotificationReminders` now uses it.
+- `php artisan about` lists the `Context key type` beside the other key types.
 - `NotificationOperation::SubjectDeleted`, recorded for the inbox cleanup of
   `notifications.inbox.on_subject_deleted`.
 

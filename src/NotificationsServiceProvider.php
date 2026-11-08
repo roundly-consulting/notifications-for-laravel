@@ -65,6 +65,7 @@ final class NotificationsServiceProvider extends PackageServiceProvider
                 'Key type' => NotificationsConfig::keyType()->value,
                 'Subject key type' => NotificationsConfig::subjectKeyType()->value,
                 'Primary key type' => NotificationsConfig::primaryKeyType()->value,
+                'Context key type' => NotificationsConfig::contextKeyType()->value,
                 'Digest default' => NotificationsConfig::digestDefault()->value,
                 'Interop' => sprintf('%d mapped, %d suppressed', count(app(InteropRules::class)->mapped()), count(app(InteropRules::class)->suppressed())),
             ]);
