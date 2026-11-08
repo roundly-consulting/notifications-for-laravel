@@ -33,6 +33,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `cancelled/unknown` after three attempts. An anchored one now also follows its anchor when the
   model (with `HasNotificationReminders`) is saved, also when no type names the model as its
   subject.
+- `remind()` with `->key()` and several offsets keeps a row per offset (a repeat call replaces
+  each one). Each offset replaced the previous one, so only the last offset was ever sent.
 
 ## 1.1.0 - 2026-11-08
 

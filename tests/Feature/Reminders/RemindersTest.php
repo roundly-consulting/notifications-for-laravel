@@ -849,3 +849,24 @@ it('moves an ad-hoc reminder of a subject-less type when its anchor changes', fu
         })->newQuery()->findOrFail($contract->id);
     }],
 ]);
+
+it('keeps every offset of a keyed ad-hoc reminder', function (): void {
+    $contract = expiringContract();
+    $owner = $contract->owner;
+    $rule = fn () => Reminder::before('expires_at', 'P2D', 'P1D')->key('followup');
+    $adHoc = fn () => NotificationReminder::query()->where('rule', 'like', 'adhoc:%')->where('status', ReminderStatus::Pending->value)->orderBy('due_at')->get();
+
+    $rows = Notifications::for($contract)->remind('contract.expiring', $rule(), to: $owner);
+
+    expect(collect($rows)->pluck('id')->unique())->toHaveCount(2)
+        ->and($adHoc()->map(fn ($row): string => $row->offset.'@'.$row->due_at->format('Y-m-d'))->all())->toBe(['-P2D@2027-02-15', '-P1D@2027-02-16']);
+
+    Notifications::for($contract)->remind('contract.expiring', $rule(), to: $owner);
+
+    expect($adHoc())->toHaveCount(2);
+
+    Notifications::for($contract)->remind('contract.expiring', Reminder::before('expires_at', 'P3D')->key('single'), to: $owner);
+    Notifications::for($contract)->remind('contract.expiring', Reminder::before('expires_at', 'P4D')->key('single'), to: $owner);
+
+    expect($adHoc())->toHaveCount(3);
+});

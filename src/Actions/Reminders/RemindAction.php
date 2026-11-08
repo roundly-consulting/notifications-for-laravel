@@ -85,7 +85,13 @@ final readonly class RemindAction
                 continue;
             }
 
-            $key = 'adhoc:'.($rule->hasExplicitKey() ? $rule->ruleKey() : $rule->attribute.':'.$offset);
+            // An explicit key names the reminder; with several offsets each offset keeps its own
+            // row under it (a repeat call replaces each one), a single offset keeps the bare key.
+            $key = 'adhoc:'.match (true) {
+                ! $rule->hasExplicitKey() => $rule->attribute.':'.$offset,
+                count($rule->offsets) > 1 => $rule->ruleKey().':'.$offset,
+                default => $rule->ruleKey(),
+            };
 
             $rows[] = ReminderWriter::upsert($subject, $type, $key, $rule->attribute, $offset, $anchor, $due, $stored, $payload, keyedByOffset: false);
         }
