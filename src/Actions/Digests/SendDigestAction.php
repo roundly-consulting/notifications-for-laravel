@@ -9,7 +9,6 @@ use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
-use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestRunStatus;
 use RoundlyConsulting\Notifications\Events\DigestSent;
@@ -18,6 +17,7 @@ use RoundlyConsulting\Notifications\Models\DigestRun;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Support\Access;
 use RoundlyConsulting\Notifications\Support\Clock;
+use RoundlyConsulting\Notifications\Support\DigestEntries;
 use RoundlyConsulting\Notifications\Support\DigestEntry;
 use RoundlyConsulting\Notifications\Support\DigestRenderer;
 use RoundlyConsulting\Notifications\Support\DigestRuns;
@@ -26,8 +26,6 @@ use RoundlyConsulting\Notifications\Support\MailAddresses;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
-use RoundlyConsulting\Notifications\Support\Preferences;
-use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use Throwable;
 
@@ -126,32 +124,15 @@ final readonly class SendDigestAction
      */
     private function entry(NotificationDelivery $delivery, Model $recipient): ?DigestEntry
     {
-        $type = $this->types->get($delivery->type);
-        $reason = null;
-        $subject = null;
+        $entry = DigestEntries::resolve($delivery, $recipient, $this->types);
 
-        if ($type === null) {
-            $reason = CancelReason::UnknownType;
-        } else {
-            $subjectGiven = $delivery->subject_type !== null;
-            $subject = $subjectGiven ? Subjects::find($type, $delivery->subject_type, $delivery->subject_id) : null;
-
-            if ($subjectGiven && $subject === null) {
-                $reason = CancelReason::SubjectGone;
-            } elseif (! Access::allows($type, $recipient, $subject, $subjectGiven)) {
-                $reason = CancelReason::NoAccess;
-            } elseif (! Preferences::enabled($type, Channel::Mail, $recipient)) {
-                $reason = CancelReason::Muted;
-            }
-        }
-
-        if ($reason !== null) {
-            $delivery->forceFill(['status' => DeliveryStatus::Cancelled, 'cancel_reason' => $reason, 'open_key' => null])->save();
+        if ($entry instanceof CancelReason) {
+            $delivery->forceFill(['status' => DeliveryStatus::Cancelled, 'cancel_reason' => $entry, 'open_key' => null])->save();
 
             return null;
         }
 
-        return new DigestEntry($delivery, $type, $subject);
+        return $entry;
     }
 
     private function failed(DigestRun $run): void

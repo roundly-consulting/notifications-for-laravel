@@ -382,3 +382,21 @@ it('dispatches a waiting digest again after the lease, and sends it once', funct
 
     Notification::assertSentToTimes($reader, DigestMailNotification::class, 1);
 });
+
+it('previews only what the digest would send', function (): void {
+    $author = user();
+    $reader = digestReader();
+    $hidden = post($author);
+    Notifications::send('comment.posted', $hidden, $reader, ['title' => 'Hidden']);
+    Notifications::send('comment.posted', post($author), $reader, ['title' => 'Shown']);
+    $hidden->forceFill(['private' => true])->save();
+
+    $html = (string) Notifications::digests()->preview($reader)?->render();
+
+    expect(Notifications::digests()->preview($reader)?->subject)->toBe('Your daily summary: 1 update')
+        ->and($html)->toContain('Shown')->not->toContain('Hidden');
+
+    Notifications::preferences($reader)->mute('comment.posted');
+    expect(Notifications::digests()->preview($reader))->toBeNull()
+        ->and(NotificationDelivery::query()->where('status', DeliveryStatus::Digest->value)->count())->toBe(2);
+});

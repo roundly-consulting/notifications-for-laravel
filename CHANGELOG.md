@@ -48,6 +48,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   (registered after the package's) cancelled. The cancelled claim stayed `sending` and swallowed
   every later mail of the window; an unconfirmed claim now absorbs later mails for 60 seconds at
   most.
+- `digests()->preview()` leaves out what the digest would drop: items whose subject is gone or no
+  longer visible to the user, and muted types. It showed titles of records the user can no longer
+  see.
 
 ## 1.1.0 - 2026-11-08
 

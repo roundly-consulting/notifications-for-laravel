@@ -8,16 +8,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
+use RoundlyConsulting\Notifications\Support\DigestEntries;
 use RoundlyConsulting\Notifications\Support\DigestEntry;
 use RoundlyConsulting\Notifications\Support\DigestRenderer;
 use RoundlyConsulting\Notifications\Support\Locales;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\Preferences;
-use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
- * The digest a user would get from their parked items right now — rendered, never sent.
+ * The digest a user would get from their parked items right now — rendered, never sent. Entries
+ * the digest would drop (no access, muted, subject gone) are left out; nothing is written.
  */
 final readonly class PreviewDigestAction
 {
@@ -37,10 +38,11 @@ final readonly class PreviewDigestAction
         $entries = [];
 
         foreach ($deliveries as $delivery) {
-            $type = $this->types->get($delivery->type);
+            // The digest's own checks, without its writes: what it would drop is not previewed.
+            $entry = DigestEntries::resolve($delivery, $user, $this->types);
 
-            if ($type !== null) {
-                $entries[] = new DigestEntry($delivery, $type, Subjects::find($type, $delivery->subject_type, $delivery->subject_id));
+            if ($entry instanceof DigestEntry) {
+                $entries[] = $entry;
             }
         }
 
