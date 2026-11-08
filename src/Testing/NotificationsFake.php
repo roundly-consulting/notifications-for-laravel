@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications\Testing;
 
 use Closure;
-use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert as PHPUnit;
 use RoundlyConsulting\Notifications\Actions\Sending\ResolveRecipientsAction;
@@ -33,11 +32,6 @@ final class NotificationsFake extends NotificationsManager
     private array $recorded = [];
 
     private bool $passthrough = false;
-
-    public function __construct(Container $container)
-    {
-        parent::__construct($container);
-    }
 
     /**
      * Record and also run every operation.
@@ -252,13 +246,13 @@ final class NotificationsFake extends NotificationsManager
             return new RecordedOperation($operation, $context);
         }
 
-        $registry = $this->container->make(TypeRegistry::class);
+        $registry = $this->container()->make(TypeRegistry::class);
         $type = $registry->get($data->type);
         $recipients = [];
 
         if ($type !== null) {
             try {
-                $recipients = $this->container->make(ResolveRecipientsAction::class)->execute($type, $data->recipients, $data->subject, $data->actor);
+                $recipients = $this->container()->make(ResolveRecipientsAction::class)->execute($type, $data->recipients, $data->subject, $data->actor);
             } catch (Throwable) {
                 $recipients = [];
             }

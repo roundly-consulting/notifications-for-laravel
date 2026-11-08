@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications;
 
 use Closure;
+use Illuminate\Container\Container as CurrentContainer;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notification;
@@ -43,13 +44,12 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
  *
  * Not final on purpose: NotificationsFake extends it, so code that injects this class still
  * type-checks under `Notifications::fake()`.
+ *
+ * Holds no container: it is a singleton a host may resolve at boot, and under Octane each request
+ * runs in its own sandbox container, so every call resolves from the current one.
  */
 class NotificationsManager
 {
-    public function __construct(
-        protected readonly Container $container,
-    ) {}
-
     /**
      * Notify recipients of one event: inbox and mail, preferences, de-dup, quiet hours, digests
      * and access are applied per recipient.
@@ -121,7 +121,7 @@ class NotificationsManager
      */
     public function register(string ...$types): void
     {
-        $this->container->make(TypeRegistry::class)->register(...$types);
+        $this->container()->make(TypeRegistry::class)->register(...$types);
     }
 
     /**
@@ -129,7 +129,7 @@ class NotificationsManager
      */
     public function registerType(NotificationType $type): void
     {
-        $this->container->make(TypeRegistry::class)->add($type);
+        $this->container()->make(TypeRegistry::class)->add($type);
     }
 
     /**
@@ -142,7 +142,7 @@ class NotificationsManager
 
     public function types(): TypesAccessor
     {
-        return new TypesAccessor($this->container->make(TypeRegistry::class));
+        return new TypesAccessor($this->container()->make(TypeRegistry::class));
     }
 
     public function reminders(): RemindersAccessor
@@ -162,7 +162,7 @@ class NotificationsManager
 
     public function interop(): InteropAccessor
     {
-        return new InteropAccessor($this->container->make(InteropRules::class));
+        return new InteropAccessor($this->container()->make(InteropRules::class));
     }
 
     /**
@@ -218,6 +218,16 @@ class NotificationsManager
     }
 
     /**
+     * The current container (the request's sandbox under Octane), never the one at boot.
+     *
+     * @internal
+     */
+    public function container(): Container
+    {
+        return CurrentContainer::getInstance();
+    }
+
+    /**
      * Run one state-changing operation. Every handle, accessor, builder, channel and model trait
      * funnels its terminal call through here, resolving the action from the container, so host
      * overrides apply and the fake records the call. The fake returns null for operations it
@@ -235,7 +245,7 @@ class NotificationsManager
      */
     public function perform(NotificationOperation $operation, string $action, Closure $execute, array $context = []): mixed
     {
-        $instance = $this->container->make($action);
+        $instance = $this->container()->make($action);
 
         if (! $instance instanceof $action) {
             throw new LogicException(sprintf('The container resolved [%s] to another class.', class_basename($action)));

@@ -6,6 +6,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
+### Changed
+
+- Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
+
+### Fixed
+
+- Octane: `NotificationsManager` no longer keeps the container it was built with. It resolves
+  every action from the current container, so a per-request binding (an action override, a
+  sandboxed config) applies even when a provider used the facade during boot.
+
 ## 1.0.0 - 2026-11-07
 
 Initial public release. Requires PHP 8.4 or newer (tested on 8.4, 8.5 and 8.6) and Laravel 13, on
