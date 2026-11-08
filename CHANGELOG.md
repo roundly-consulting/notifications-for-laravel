@@ -38,6 +38,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - `remind()` or `schedule()` while the same reminder is being fired no longer leaves a second
   pending row behind: the waiting row is replaced by later calls and takes over the key once the
   fire closes. The reminder used to fire twice.
+- After a host transaction that wrote a user's preferences rolled back, later writes for that user
+  in the same long-running process (Octane, a queue worker) take the preference lock again. They
+  ran unlocked, so two concurrent writes could lose one.
 
 ## 1.1.0 - 2026-11-08
 

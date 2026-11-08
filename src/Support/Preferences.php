@@ -230,6 +230,12 @@ final class Preferences
 
         $connection->afterCommit($release);
 
+        // A host transaction that rolls back drops the commit callback: release then too, or the
+        // stale entry would let this process write the user's preferences unlocked from now on.
+        if ($connection->transactionLevel() > 0) {
+            $connection->afterRollBack($release);
+        }
+
         return $result;
     }
 

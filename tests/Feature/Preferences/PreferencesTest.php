@@ -35,6 +35,8 @@ use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Options\DigestPreference;
 use RoundlyConsulting\Notifications\Options\TimezonePreference;
+use RoundlyConsulting\Notifications\Support\Keys;
+use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\RequestAwaitingApproval;
@@ -628,4 +630,28 @@ it('refuses a type key that is not a key in a PreferencesUpdate', function (): v
     expect(fn () => Notifications::preferences($user)->update(new PreferencesUpdate(channels: [RequestAwaitingApproval::class => ['mail' => false]])))
         ->toThrow(UnknownNotificationTypeException::class, 'The notification type "RequestAwaitingApproval" is not registered.')
         ->and(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+});
+
+it('keeps the preference lock for later writes after a host transaction rolled back', function (): void {
+    $user = user();
+    $name = 'notifications:prefs:'.Keys::digest(ModelRefs::identity($user));
+    $takeable = null;
+    Option::saving(function () use (&$takeable, $name): void {
+        $takeable = Cache::store()->getStore()->lock($name, 10, 'other')->get();
+    });
+
+    try {
+        DB::transaction(function () use ($user): void {
+            Notifications::preferences($user)->mute('comment.posted');
+
+            throw new RuntimeException('rollback');
+        });
+    } catch (RuntimeException) {
+    }
+
+    at('2026-11-09 10:00:30');                     // the cache lock's own TTL has passed
+    DB::transaction(fn () => Notifications::preferences($user)->mute('request.awaiting_approval'));
+
+    expect($takeable)->toBeFalse();                 // nobody else could take the lock mid-write
+    Option::flushEventListeners();
 });
