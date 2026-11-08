@@ -21,7 +21,6 @@ use RoundlyConsulting\Notifications\Reminders\ReminderRule;
 use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\Durations;
 use RoundlyConsulting\Notifications\Support\Escalations;
-use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\ReminderClaims;
@@ -152,15 +151,19 @@ final readonly class FireEscalationAction
             reminder: new ReminderReference($id, $row->rule, $root?->offset, $row->due_at, $row->level),
         ));
 
-        $row->forceFill(['status' => ReminderStatus::Sent, 'fired_at' => $now, 'active_key' => null, 'claimed_at' => null])->save();
-
         $next = $levels[$row->level] ?? null;
 
-        if ($next !== null) {
-            $root === null
-                ? $this->armNextSendLevel($row, $next, $now)
-                : Escalations::armLevel($root, $next, $row->level + 1, $subject, $now);
-        }
+        // One transaction: a send-level chain's next level takes over the chain key the fired
+        // level releases, so a concurrent send cannot open a second chain in between.
+        $row->getConnection()->transaction(function () use ($row, $root, $next, $now, $subject): void {
+            $row->forceFill(['status' => ReminderStatus::Sent, 'fired_at' => $now, 'active_key' => null, 'claimed_at' => null])->save();
+
+            if ($next !== null) {
+                $root === null
+                    ? $this->armNextSendLevel($row, $next, $now)
+                    : Escalations::armLevel($root, $next, $row->level + 1, $subject, $now);
+            }
+        });
 
         Event::dispatch(new EscalationFired($row));
 
@@ -211,9 +214,8 @@ final readonly class FireEscalationAction
     private function armNextSendLevel(NotificationReminder $row, EscalationRule $next, CarbonImmutable $now): void
     {
         $subject = ModelRefs::find($row->subject_type, $row->subject_id, withTrashed: true);
-        $send = $row->data['send'] ?? null;
 
-        if ($subject === null || ! is_string($send)) {
+        if ($subject === null) {
             return;
         }
 
@@ -227,7 +229,7 @@ final readonly class FireEscalationAction
             'due_at' => $now->add($next->after),
             'recipients' => Escalations::storedRecipients($next->to),
             'data' => $row->data,
-            'active_key' => Keys::reminder(ModelRefs::identity($subject), $row->type, $send, 'L'.$level),
+            'active_key' => Escalations::sendChainKey($subject, $row->type),
         ]);
     }
 }

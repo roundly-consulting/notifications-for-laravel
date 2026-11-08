@@ -8,7 +8,6 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Str;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\Enums\ReminderKind;
 use RoundlyConsulting\Notifications\Enums\ReminderStatus;
@@ -41,7 +40,10 @@ final class Escalations
     }
 
     /**
-     * Arm the first level of a send's escalation chain.
+     * Arm the first level of a send's escalation chain — unless the subject already has an open
+     * send-level chain for the type: one chain per subject and type, so repeated sends (with or
+     * without `once()`) escalate once. The open chain keeps its recipients and due times; a send
+     * after it ended (fired its last level, acknowledged, cancelled) arms a new one.
      */
     public static function armForSend(NotificationType $type, Model $subject, SendNotificationData $data, CarbonImmutable $at): void
     {
@@ -51,8 +53,6 @@ final class Escalations
             'type' => $rule->type,
         ], $data->escalations);
 
-        $send = 'send:'.($data->idempotencyKey ?? (string) Str::ulid());
-
         self::insert($subject, [
             'type' => $type->key(),
             'rule' => null,
@@ -60,9 +60,18 @@ final class Escalations
             'level' => 1,
             'due_at' => $at->add($data->escalations[0]->after),
             'recipients' => $chain[0]['to'],
-            'data' => ['payload' => $data->data, 'chain' => $chain, 'send' => $send],
-            'active_key' => Keys::reminder(ModelRefs::identity($subject), $type->key(), $send, 'L1'),
+            'data' => ['payload' => $data->data, 'chain' => $chain],
+            'active_key' => self::sendChainKey($subject, $type->key()),
         ]);
+    }
+
+    /**
+     * The open-row key every level of a send-level chain shares: only one level is pending at a
+     * time, so the unique key allows one open chain per subject and type.
+     */
+    public static function sendChainKey(Model $subject, string $type): string
+    {
+        return Keys::reminder(ModelRefs::identity($subject), $type, 'send', 'chain');
     }
 
     /**

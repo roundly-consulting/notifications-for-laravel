@@ -322,6 +322,38 @@ it('chains send-level escalation levels and stops them on acknowledgement', func
     Notification::assertNotSentTo($board, TypedMailNotification::class);
 });
 
+it('arms one escalation chain for repeated sends about one subject', function (): void {
+    $approver = user();
+    $director = user();
+    $request = purchaseRequest();
+    $other = purchaseRequest(company: $request->company, reference: 'PR-2');
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director');
+    $send = fn ($subject) => Notifications::type('request.awaiting_approval')->about($subject)->to($approver)->with(['reference' => 'PR'])
+        ->escalate(after: 'P1D', to: $director)
+        ->send();
+    $pending = fn () => NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->where('status', ReminderStatus::Pending->value);
+
+    $send($request);
+    at('2026-11-09 10:10:00');
+    $send($request);
+    at('2026-11-09 10:20:00');
+    $send($request);
+    $send($other);
+
+    expect($pending()->count())->toBe(2)
+        ->and($pending()->where('subject_id', $request->id)->sole()->due_at->format('Y-m-d H:i'))->toBe('2026-11-10 10:00');
+
+    at('2026-11-10 10:30:00');
+    Notifications::sweep();
+
+    Notification::assertSentToTimes($director, TypedMailNotification::class, 2);
+    expect($pending()->count())->toBe(0);
+
+    $send($request);
+
+    expect($pending()->count())->toBe(1);
+});
+
 it('requires a subject to escalate a send', function (): void {
     Notifications::type('security.alert')->to(user())->escalate('P1D', user())->send();
 })->throws(InvalidNotificationSubjectException::class, 'needs a subject here');

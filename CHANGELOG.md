@@ -32,6 +32,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `mute($type)` on a type with no such channel. `PATCH /preferences` answers 422 under
   `channels.<type>.<channel>` where it used to answer 200. Switching such a channel on stores
   nothing.
+- Behaviour change: a subject has at most one open send-level escalation chain per type.
+  Repeated sends with `->escalate()` about the same subject used to arm one chain each (unless
+  they shared a `once()` key), so a director could get ten escalations for one request. A pending
+  chain now absorbs later sends and keeps its own recipients and due times; a send after the chain
+  ended (last level fired, acknowledged or cancelled) arms a new one.
 - `PreferencesHandle::muted($type)` is `false` for a type that sends no mail (it was `true`).
 - `NotificationPreferenceChanged` fires only when a write changed the stored override; a repeated
   mute, an unmute of an untouched type or a reset of untouched preferences fires nothing.
