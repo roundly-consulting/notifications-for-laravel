@@ -431,3 +431,20 @@ it('does not collapse the inbox items of mapped notifications whose subject is u
         ->and(InboxItem::query()->orderBy('id')->get()->map(fn (InboxItem $item): string => $item->title.' x'.$item->count)->all())
         ->toBe(['Notice: ticket 1 assigned x1', 'Notice: ticket 2 assigned x1']);
 });
+
+it('does not fold a later mail into a claim a later NotificationSending listener cancelled', function (): void {
+    Notifications::define('vendor.notice')->window('PT15M')->title(fn (): string => 'Notice')->register();
+    Notifications::interop()->map(PlainVendorNotice::class, 'vendor.notice');
+    $blocked = true;
+    Event::listen(NotificationSending::class, function (NotificationSending $event) use (&$blocked): ?bool {
+        return $event->notification instanceof PlainVendorNotice && $blocked ? false : null;
+    });
+    $user = user();
+
+    $user->notify(new PlainVendorNotice('first'));
+    $blocked = false;
+    at('2026-11-09 10:05:00');
+    $user->notify(new PlainVendorNotice('second'));
+
+    expect(mailedSubjects())->toBe(['Notice: second']);
+});

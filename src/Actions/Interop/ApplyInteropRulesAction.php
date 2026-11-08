@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Actions\Interop;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\Notification;
@@ -53,6 +54,9 @@ use Throwable;
  */
 final readonly class ApplyInteropRulesAction
 {
+    /** How long an unconfirmed `sending` claim absorbs later mails. */
+    private const int CLAIM_GRACE_SECONDS = 60;
+
     public function __construct(
         private InteropRules $rules,
         private TypeRegistry $types,
@@ -188,9 +192,7 @@ final readonly class ApplyInteropRulesAction
                     if ($window !== null) {
                         $existing = $class::query()->withTrashed()->where('open_key', $openKey)->lockForUpdate()->first();
 
-                        if ($existing !== null && ! $existing->trashed()
-                            && ($existing->status->isOpen() || (in_array($existing->status, [DeliveryStatus::Sending, DeliveryStatus::Sent], true)
-                                && $existing->window_ends_at !== null && $now->lessThan($existing->window_ends_at)))) {
+                        if ($existing !== null && ! $existing->trashed() && self::absorbs($existing, $now)) {
                             $existing->forceFill(['events_count' => $existing->events_count + 1, 'last_event_at' => $now])->save();
 
                             return false;
@@ -242,6 +244,26 @@ final readonly class ApplyInteropRulesAction
                 }
             }
         }
+    }
+
+    /**
+     * Whether a later mapped mail folds into this open row. A `sending` claim counts only while
+     * it is fresh: the mail is confirmed (`sent`) within moments, so an older one was cancelled
+     * by a `NotificationSending` listener that ran after this package's and never went out.
+     */
+    private static function absorbs(NotificationDelivery $existing, CarbonImmutable $now): bool
+    {
+        if ($existing->status->isOpen()) {
+            return true;
+        }
+
+        $inWindow = $existing->window_ends_at !== null && $now->lessThan($existing->window_ends_at);
+
+        return match ($existing->status) {
+            DeliveryStatus::Sent => $inWindow,
+            DeliveryStatus::Sending => $inWindow && $existing->claimed_at !== null && $now->lessThan($existing->claimed_at->addSeconds(self::CLAIM_GRACE_SECONDS)),
+            default => false,
+        };
     }
 
     public static function isRecipient(Model $notifiable): bool

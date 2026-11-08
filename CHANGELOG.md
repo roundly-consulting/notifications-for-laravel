@@ -44,6 +44,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A mapped notification whose subject is unknown (the type has a subject class, the notification
   no `subjectFrom()`) gets its own inbox item, as its mail is not de-duplicated either. Two such
   notifications within the window were merged into one item and the first disappeared.
+- A mapped mail no longer folds into an earlier one that a host `NotificationSending` listener
+  (registered after the package's) cancelled. The cancelled claim stayed `sending` and swallowed
+  every later mail of the window; an unconfirmed claim now absorbs later mails for 60 seconds at
+  most.
 
 ## 1.1.0 - 2026-11-08
 
