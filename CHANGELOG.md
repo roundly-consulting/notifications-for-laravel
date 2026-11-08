@@ -12,6 +12,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   failed with its entries: the lease now starts when the job starts, not when the sweep queues
   it. A digest still queued after the lease is dispatched again (only one job sends). With a
   backlog of digest jobs, every waiting digest used to be lost and never retried.
+- A reminder cancelled because a date edit made its time pass (`passed`) is scheduled again when
+  the date moves back. Editing a date earlier and then back used to lose those reminders silently.
 
 ## 1.1.0 - 2026-11-08
 

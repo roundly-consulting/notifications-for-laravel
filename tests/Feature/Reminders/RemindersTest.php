@@ -788,3 +788,17 @@ it('skips ad-hoc offsets already in the past', function (): void {
     at('2026-11-09 11:00:00');
     expect(Notifications::sweep()->reminders)->toBe(1);
 });
+
+it('reschedules a reminder cancelled as passed when the anchor moves back', function (): void {
+    $contract = expiringContract();      // -P60D 12-19, -P30D 01-18, -P7D 02-10
+
+    $contract->forceFill(['expires_at' => CarbonImmutable::parse('2026-11-29 10:00:00', 'UTC')])->save();
+    expect(pendingDue($contract))->toBe(['-P7D@2026-11-22']);
+
+    $contract->forceFill(['expires_at' => CarbonImmutable::parse('2027-02-17 10:00:00', 'UTC')])->save();
+
+    expect(pendingDue($contract))->toBe(['-P60D@2026-12-19', '-P30D@2027-01-18', '-P7D@2027-02-10']);
+
+    at('2026-12-19 10:00:00');
+    expect(Notifications::sweep()->reminders)->toBe(1);
+});

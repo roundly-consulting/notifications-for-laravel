@@ -127,8 +127,10 @@ final readonly class SyncRemindersAction
             ->get();
 
         foreach ($terminal as $row) {
+            // A row cancelled because its time had passed never ran for this date (it kept the
+            // anchor it was scheduled for): moving the date back schedules it again.
             if (Anchors::same($row->anchor_value, $anchor)
-                && ! in_array($row->cancel_reason, [CancelReason::SubjectDeleted, CancelReason::AnchorCleared], true)) {
+                && ! in_array($row->cancel_reason, [CancelReason::SubjectDeleted, CancelReason::AnchorCleared, CancelReason::Passed], true)) {
                 // Already sent, skipped or cancelled for this very date: no churn per save.
                 return 0;
             }
