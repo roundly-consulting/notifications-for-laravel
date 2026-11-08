@@ -19,6 +19,7 @@ use RoundlyConsulting\Notifications\Support\PreparedSend;
 use RoundlyConsulting\Notifications\Support\Queues;
 use RoundlyConsulting\Notifications\Support\Receipts;
 use RoundlyConsulting\Notifications\Support\SendValidation;
+use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
@@ -38,14 +39,16 @@ final readonly class SendNotificationAction
     {
         $validated = SendValidation::validate($data, $this->types);
         [$type, $payload, $context] = [$validated->type, $validated->data, $validated->context];
-        $subject = $data->subject;
+        // The send is a hop like any other: access is checked on the subject as it is now, not on
+        // the caller's model (soft-deleted, or changed since it was loaded). Gone → no access.
+        $subject = $data->subject === null ? null : Subjects::fresh($type, $data->subject);
 
-        $recipients = $this->resolveRecipients->execute($type, $data->recipients, $subject, $data->actor);
+        $recipients = $this->resolveRecipients->execute($type, $data->recipients, $subject ?? $data->subject, $data->actor);
 
         $send = new PreparedSend(
             type: $type,
             subject: $subject,
-            subjectGiven: $subject !== null,
+            subjectGiven: $data->subject !== null,
             data: $payload,
             actor: $data->actor,
             context: $context,
@@ -63,7 +66,7 @@ final readonly class SendNotificationAction
             foreach (array_chunk($recipients, NotificationsConfig::fanOutChunk()) as $chunk) {
                 Queues::dispatch(new DeliverToRecipientsJob(
                     type: $type->key(),
-                    subject: $subject === null ? null : ModelRefs::ref($subject),
+                    subject: $data->subject === null ? null : ModelRefs::ref($data->subject),
                     recipients: array_map(ModelRefs::ref(...), $chunk),
                     data: $payload,
                     actor: $data->actor === null ? null : ModelRefs::ref($data->actor),

@@ -331,3 +331,33 @@ it('keeps the reminder reference through a queued fan-out', function (): void {
         ->and($deliveries->every(fn (NotificationDelivery $delivery): bool => ($delivery->data['_notifications']['reminder']['id'] ?? null) === $reminder->id))->toBeTrue()
         ->and($items->every(fn (InboxItem $item): bool => $item->reminder_id === $reminder->id))->toBeTrue();
 });
+
+it('treats a soft-deleted subject the same inline and in a fan-out', function (int $queueAbove): void {
+    config()->set('notifications.fan_out.queue_above', $queueAbove);
+    $owner = user();
+    $other = user();
+    $contract = contract(owner: $owner);
+    $contract->company->addMember($other, 'manager');
+    $contract->delete();
+
+    $result = Notifications::send('contract.expiring', $contract, [$owner, $other]);
+
+    expect(InboxItem::query()->count())->toBe(0)
+        ->and(NotificationDelivery::query()->count())->toBe(0);
+
+    if ($queueAbove === 50) {
+        expect(collect($result->outcomes)->pluck('inbox')->unique()->all())->toBe([InboxOutcome::NoAccess]);
+    }
+})->with(['inline' => [50], 'fan-out' => [1]]);
+
+it('checks access on the current subject, not a stale model', function (): void {
+    $author = user();
+    $reader = user();
+    $post = post($author);
+    Post::query()->whereKey($post->id)->update(['private' => true]);
+
+    $result = Notifications::send('comment.posted', $post, $reader, ['title' => 'x']);
+
+    expect($result->outcomes[0]->inbox)->toBe(InboxOutcome::NoAccess)
+        ->and(InboxItem::query()->count())->toBe(0);
+});

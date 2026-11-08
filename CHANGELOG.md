@@ -17,6 +17,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - `POST /inbox/{item}/acknowledge` on an item from an escalation level with its own `type:` now
   acknowledges the chain and cancels its next levels. It acknowledged the level's type, matched
   no row (`{"acknowledged": 0}`) and the chain kept escalating.
+- The send itself re-reads the subject before the access check, as the docs promise for every
+  hop. A soft-deleted subject (unless the type allows it) or one that changed since the caller
+  loaded it got an inbox item and mail inline, while the same send through a fan-out delivered
+  nothing. Now both answer `no_access`.
 
 ## 1.1.0 - 2026-11-08
 
