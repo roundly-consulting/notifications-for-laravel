@@ -182,6 +182,7 @@ final class NotificationsFake extends NotificationsManager
 
     public function assertPreferenceSet(Model $user, string $type, Channel $channel, bool $enabled): void
     {
+        $type = $this->typeKey($type);
         $matching = array_filter($this->recorded(NotificationOperation::SetPreference), static fn (RecordedOperation $set): bool => $set->concerns($user, 'user')
             && $set->context['type'] === $type
             && is_array($set->context['channels'])
@@ -193,6 +194,7 @@ final class NotificationsFake extends NotificationsManager
 
     public function assertMuted(Model $user, string $type): void
     {
+        $type = $this->typeKey($type);
         $matching = array_filter($this->recorded(NotificationOperation::SetPreference), static fn (RecordedOperation $set): bool => $set->concerns($user, 'user')
             && $set->context['type'] === $type
             && $set->context['enabled'] === false);
@@ -299,6 +301,7 @@ final class NotificationsFake extends NotificationsManager
 
     public function assertReminderScheduled(Model $subject, string $type): void
     {
+        $type = $this->typeKey($type);
         $matching = array_filter(
             $this->recorded(),
             static fn (RecordedOperation $op): bool => in_array($op->operation, [NotificationOperation::ScheduleReminders, NotificationOperation::Remind], true)
@@ -329,6 +332,7 @@ final class NotificationsFake extends NotificationsManager
 
     public function assertAcknowledged(Model $subject, ?string $type = null): void
     {
+        $type = $type === null ? null : $this->typeKey($type);
         $matching = array_filter($this->recorded(NotificationOperation::Acknowledge), static fn (RecordedOperation $op): bool => $op->concerns($subject, 'subject')
             && ($type === null || ($op->context['type'] ?? null) === $type));
 
@@ -461,6 +465,11 @@ final class NotificationsFake extends NotificationsManager
     private function record(NotificationOperation $operation, array $context): RecordedOperation
     {
         $data = $context['data'] ?? null;
+
+        // Types are recorded by key, as the real operations store them (a class-string resolves).
+        if (is_string($context['type'] ?? null)) {
+            $context['type'] = $this->typeKey($context['type']);
+        }
 
         if ($operation !== NotificationOperation::Send || ! $data instanceof SendNotificationData) {
             return new RecordedOperation($operation, $context);

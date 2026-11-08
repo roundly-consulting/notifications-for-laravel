@@ -64,6 +64,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   404.
 - Under `Notifications::fake()`, `send(Foo::class, …)` returns a `SendResult` whose `type` is the
   key, like the real send (it was the class name).
+- The fake records every operation's type by key and every type-taking assertion
+  (`assertMuted()`, `assertPreferenceSet()`, `assertReminderScheduled()`, `assertAcknowledged()`,
+  …) accepts a key or a class, like the real operations, which store the key. `remind(Foo::class)`
+  then `assertReminderScheduled($subject, 'foo.key')` failed.
 
 ## 1.1.0 - 2026-11-08
 

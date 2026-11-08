@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notification;
 use PHPUnit\Framework\ExpectationFailedException;
@@ -15,8 +16,10 @@ use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationTypeException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Mail\InboxMessage;
 use RoundlyConsulting\Notifications\Models\InboxItem;
+use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Testing\NotificationsFake;
 use RoundlyConsulting\Notifications\Testing\RecordedOperation;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\ContractExpiring;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\RequestAwaitingApproval;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\SecurityAlert;
 
@@ -265,4 +268,29 @@ it('returns the same SendResult type key under the fake as the real send', funct
     Notifications::fake();
 
     expect(Notifications::send(SecurityAlert::class, null, user())->type)->toBe($real)->toBe('security.alert');
+});
+
+it('matches a type key or class in every type-taking assertion and records by key', function (): void {
+    $fake = Notifications::fake();
+    $user = user();
+    $contract = contract();
+
+    Notifications::for($contract)->remind(ContractExpiring::class, Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: $user);
+    Notifications::for($contract)->acknowledge(ContractExpiring::class);
+    Notifications::preferences($user)->mute(RequestAwaitingApproval::class);
+    Notifications::reminders()->backfill(ContractExpiring::class);
+
+    foreach (['contract.expiring', ContractExpiring::class] as $type) {
+        $fake->assertReminderScheduled($contract, $type);
+        $fake->assertAcknowledged($contract, $type);
+    }
+
+    foreach (['request.awaiting_approval', RequestAwaitingApproval::class] as $type) {
+        $fake->assertMuted($user, $type);
+        $fake->assertPreferenceSet($user, $type, Channel::Mail, false);
+    }
+
+    $fake->assertRecorded(NotificationOperation::BackfillReminders, fn (RecordedOperation $op): bool => $op->context['type'] === 'contract.expiring');
+    expect(fn () => $fake->assertReminderScheduled($contract, SecurityAlert::class))->toThrow(ExpectationFailedException::class)
+        ->and(fn () => $fake->assertMuted($user, SecurityAlert::class))->toThrow(ExpectationFailedException::class);
 });
