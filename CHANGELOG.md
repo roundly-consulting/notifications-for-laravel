@@ -14,6 +14,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   backlog of digest jobs, every waiting digest used to be lost and never retried.
 - A reminder cancelled because a date edit made its time pass (`passed`) is scheduled again when
   the date moves back. Editing a date earlier and then back used to lose those reminders silently.
+- `POST /inbox/{item}/acknowledge` on an item from an escalation level with its own `type:` now
+  acknowledges the chain and cancels its next levels. It acknowledged the level's type, matched
+  no row (`{"acknowledged": 0}`) and the chain kept escalating.
 
 ## 1.1.0 - 2026-11-08
 

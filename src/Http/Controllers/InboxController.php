@@ -15,6 +15,7 @@ use RoundlyConsulting\Notifications\Http\Resources\InboxItemResource;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Support\Access;
+use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
@@ -128,7 +129,8 @@ final class InboxController extends Controller
     }
 
     /**
-     * Acknowledges the reminder or escalation the item came from (stops its escalation). A user
+     * Acknowledges the reminder or escalation the item came from (stops its escalation) — under
+     * the type its chain is stored with, also for a level that sends another type. A user
      * who can no longer see the subject gets the same 404 as for a foreign item: an old item is no
      * key to silence an escalation others rely on.
      */
@@ -149,7 +151,11 @@ final class InboxController extends Controller
                 throw InboxItemNotFoundException::notFound();
             }
 
-            return new JsonResponse(['acknowledged' => $this->notifications->for($subject)->acknowledge($found->type, $user)]);
+            // An escalation level with its own `type:` writes items of that type, but its chain is
+            // stored under the original type: acknowledge what the item's reminder row belongs to.
+            $reminder = $found->reminder_id === null ? null : NotificationModels::reminder()::query()->withTrashed()->find($found->reminder_id);
+
+            return new JsonResponse(['acknowledged' => $this->notifications->for($subject)->acknowledge($reminder->type ?? $found->type, $user)]);
         });
     }
 

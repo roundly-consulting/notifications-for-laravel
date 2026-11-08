@@ -12,6 +12,7 @@ use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\UserRecipients;
 use RoundlyConsulting\Notifications\Support\Preferences;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -165,6 +166,30 @@ it('answers 404 on read, unread, archive and unarchive for an item the reader lo
     'archive' => ['POST', 'archive'],
     'unarchive' => ['DELETE', 'archive'],
 ])->with(['recheck on' => [true], 'recheck off' => [false]]);
+
+it('acknowledges an escalation item of its own level type and stops the chain', function (): void {
+    Notifications::define('request.overdue')->subject(PurchaseRequest::class)->title(fn (): string => 'Overdue')->register();
+    $approver = user();
+    $director = user();
+    $board = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director')->addMember($board, 'board');
+    Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->escalate(after: 'P1D', to: $director, type: 'request.overdue')
+        ->escalate(after: 'P2D', to: $board)
+        ->send();
+
+    at(CarbonImmutable::now('UTC')->addDay()->toDateTimeString());
+    Notifications::sweep();
+    $item = InboxItem::query()->where('recipient_id', $director->id)->sole();
+    expect($item->type)->toBe('request.overdue');
+
+    $this->actingAs($director)->postJson("/notifications/inbox/{$item->id}/acknowledge")
+        ->assertOk()
+        ->assertJsonPath('acknowledged', 1);
+
+    expect(NotificationReminder::query()->where('status', 'pending')->count())->toBe(0);
+});
 
 it('refuses to acknowledge for a user who lost access to the subject', function (): void {
     $approver = user();
