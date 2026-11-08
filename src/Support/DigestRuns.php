@@ -62,7 +62,7 @@ final class DigestRuns
         return NotificationModels::digestRun()::query()
             ->whereKey($run->getKey())
             ->where('status', DigestRunStatus::Pending->value)
-            ->toBase()->incrementEach(['attempts' => 1], ['status' => DigestRunStatus::Sending->value, 'claimed_at' => $now, 'updated_at' => $now]) > 0;
+            ->incrementEach(['attempts' => 1], ['status' => DigestRunStatus::Sending->value, 'claimed_at' => $now]) > 0;
     }
 
     /**

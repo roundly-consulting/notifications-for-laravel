@@ -35,7 +35,7 @@ final class DeliveryStates
             ->where('source', $source)
             ->whereIn('status', [DeliveryStatus::Pending->value, DeliveryStatus::Held->value])
             ->where('send_after', '<=', $now->format(Clock::FORMAT))
-            ->toBase()->incrementEach(['attempts' => 1], ['status' => DeliveryStatus::Sending->value, 'claimed_at' => $now->format(Clock::FORMAT), 'updated_at' => $now->format(Clock::FORMAT)]) > 0;
+            ->incrementEach(['attempts' => 1], ['status' => DeliveryStatus::Sending->value, 'claimed_at' => $now->format(Clock::FORMAT)]) > 0;
     }
 
     public static function sent(NotificationDelivery $delivery): void

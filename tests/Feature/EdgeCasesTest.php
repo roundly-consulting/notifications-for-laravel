@@ -44,9 +44,12 @@ use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
 use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Support\Anchors;
+use RoundlyConsulting\Notifications\Support\DeliveryStates;
+use RoundlyConsulting\Notifications\Support\DigestRuns;
 use RoundlyConsulting\Notifications\Support\Durations;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
+use RoundlyConsulting\Notifications\Support\ReminderClaims;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Support\Windows;
 use RoundlyConsulting\Notifications\Testing\NotificationExpectations;
@@ -501,4 +504,25 @@ it('dispatches no event for an archive or unarchive that changes nothing', funct
     Notifications::inbox($user)->unarchive($item);
 
     Event::assertNotDispatched(InboxItemUnarchived::class);
+});
+
+it('stamps updated_at on every claim, so prune ages claimed rows from the claim (C-3)', function (): void {
+    at('2026-11-01 08:00:00');
+    $delivery = NotificationDelivery::factory()->create();
+    $run = DigestRun::factory()->create();
+    $reminder = NotificationReminder::factory()->create(['due_at' => CarbonImmutable::now('UTC')]);
+
+    at('2026-11-09 10:00:00');
+
+    expect(DeliveryStates::claim($delivery->id, NotificationDelivery::SOURCE_TYPE))->toBeTrue()
+        ->and(DigestRuns::claim($run))->toBeTrue()
+        ->and(ReminderClaims::claim($reminder->id))->toBeTrue();
+
+    foreach ([$delivery, $run, $reminder] as $row) {
+        $fresh = $row->fresh();
+
+        expect($fresh?->updated_at?->format('Y-m-d H:i:s'))->toBe('2026-11-09 10:00:00')
+            ->and($fresh?->claimed_at?->format('Y-m-d H:i:s'))->toBe('2026-11-09 10:00:00')
+            ->and($fresh?->attempts)->toBe(1);
+    }
 });
