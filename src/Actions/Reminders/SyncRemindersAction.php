@@ -42,7 +42,7 @@ final readonly class SyncRemindersAction
      */
     public function execute(Model $subject, ?string $type = null): int
     {
-        $types = $type === null ? $this->types->forSubject($subject) : [$this->types->find($type)];
+        $types = $type === null ? $this->withAdHocTypes($subject, $this->types->forSubject($subject)) : [$this->types->find($type)];
         $changed = 0;
 
         foreach ($types as $definition) {
@@ -51,6 +51,37 @@ final readonly class SyncRemindersAction
         }
 
         return $changed;
+    }
+
+    /**
+     * Adds the types of the subject's pending anchored ad-hoc rows — a type without a subject
+     * class takes ad-hoc reminders on any model, and those follow their anchor too.
+     *
+     * @param  list<NotificationType>  $types
+     * @return list<NotificationType>
+     */
+    private function withAdHocTypes(Model $subject, array $types): array
+    {
+        $keys = ReminderRows::forSubject($subject)
+            ->where('kind', ReminderKind::Reminder->value)
+            ->where('status', ReminderStatus::Pending->value)
+            ->where('rule', 'like', 'adhoc:%')
+            ->whereNotNull('anchor')
+            ->distinct()
+            ->pluck('type')
+            ->all();
+
+        $known = array_map(static fn (NotificationType $type): string => $type->key(), $types);
+
+        foreach ($keys as $key) {
+            $type = is_string($key) && ! in_array($key, $known, true) ? $this->types->get($key) : null;
+
+            if ($type !== null) {
+                $types[] = $type;
+            }
+        }
+
+        return $types;
     }
 
     private function syncType(Model $subject, NotificationType $type): int

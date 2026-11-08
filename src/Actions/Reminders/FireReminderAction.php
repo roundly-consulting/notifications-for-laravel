@@ -137,7 +137,9 @@ final readonly class FireReminderAction
 
         $this->send->execute(new SendNotificationData(
             type: $type->key(),
-            subject: $subject,
+            // A type without a subject class reminds about nothing: the row's subject only anchors
+            // and owns the reminder (an ad-hoc reminder on any model).
+            subject: $type->subject() === null ? null : $subject,
             recipients: $recipients,
             data: $row->data ?? ['reminder' => $row->offset],
             idempotencyKey: 'reminder:'.$id,

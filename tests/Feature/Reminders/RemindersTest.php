@@ -24,6 +24,7 @@ use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
+use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Reminders\ReminderRule;
@@ -802,3 +803,49 @@ it('reschedules a reminder cancelled as passed when the anchor moves back', func
     at('2026-12-19 10:00:00');
     expect(Notifications::sweep()->reminders)->toBe(1);
 });
+
+it('fires an ad-hoc reminder on a type without a subject', function (): void {
+    Notifications::define('report.ready')->title(fn (NotificationPayload $p): string => 'Report '.$p->data['id'].' is ready')->register();
+    $contract = expiringContract();
+    $user = user();
+
+    Notifications::for($contract)->remind('report.ready', Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: $user, data: ['id' => 7]);
+
+    at('2026-11-10 10:00:00');
+    expect(Notifications::sweep()->reminders)->toBe(1);
+
+    $item = InboxItem::query()->where('type', 'report.ready')->sole();
+    expect($item->recipient_id)->toBe($user->id)
+        ->and($item->subject_type)->toBeNull()
+        ->and($item->title)->toBe('Report 7 is ready')
+        ->and(NotificationReminder::query()->where('type', 'report.ready')->sole()->status)->toBe(ReminderStatus::Sent);
+});
+
+it('moves an ad-hoc reminder of a subject-less type when its anchor changes', function (Closure $subject): void {
+    Notifications::define('report.ready')->title(fn (): string => 'Report ready')->register();
+    $model = $subject();
+
+    Notifications::for($model)->remind('report.ready', Reminder::before('expires_at', 'P1D'), to: user());
+    $model->forceFill(['expires_at' => CarbonImmutable::parse('2027-03-17 10:00:00', 'UTC')])->save();
+
+    expect(NotificationReminder::query()->where('type', 'report.ready')->sole()->due_at->format('Y-m-d'))->toBe('2027-03-16');
+})->with([
+    'a subject with reminder types' => [fn () => expiringContract()],
+    'a subject without any type' => [function () {
+        $contract = expiringContract();
+
+        return (new class extends Model
+        {
+            use HasNotificationReminders;
+
+            protected $table = 'contracts';
+
+            protected $guarded = [];
+
+            protected function casts(): array
+            {
+                return ['expires_at' => 'immutable_datetime'];
+            }
+        })->newQuery()->findOrFail($contract->id);
+    }],
+]);

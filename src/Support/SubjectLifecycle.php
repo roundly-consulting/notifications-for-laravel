@@ -27,7 +27,9 @@ final class SubjectLifecycle
     {
         $types = app(TypeRegistry::class)->forSubject($subject);
 
-        if ($types === []) {
+        // A model no type names as its subject can still carry anchored ad-hoc reminders (of a
+        // type without a subject class): an update checks those.
+        if ($types === [] && $created) {
             return;
         }
 

@@ -28,6 +28,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   one of its ancestor classes (e.g. a vendor base class or `Notification` itself): it passes
   through untouched unless the type is urgent with no window. A second reset mail within the
   window was folded and never sent. `notifications:doctor` warns about such a mapping.
+- An ad-hoc reminder on a type without a `subject()` (`remind('report.ready', …)` on any model,
+  the documented example) fires, about no subject. Every fire threw and the row ended
+  `cancelled/unknown` after three attempts. An anchored one now also follows its anchor when the
+  model (with `HasNotificationReminders`) is saved, also when no type names the model as its
+  subject.
 
 ## 1.1.0 - 2026-11-08
 
