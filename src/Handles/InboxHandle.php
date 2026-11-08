@@ -374,7 +374,8 @@ final readonly class InboxHandle
 
     /**
      * `notifications.inbox.recheck_on_read`: hide an item whose subject the reader can no longer
-     * access (counts stay raw).
+     * access (counts stay raw). Reuses the subject the query eager-loaded; only a subject the
+     * load could not see (soft-deleted) is read again, and only for a type that allows it.
      */
     private function allowed(InboxItem $item): bool
     {
@@ -384,7 +385,16 @@ final readonly class InboxHandle
             return true;
         }
 
-        return Access::allows($type, $this->recipient, Subjects::find($type, $item->subject_type, $item->subject_id), true);
+        $loaded = $item->subject;
+
+        if ($loaded instanceof Model) {
+            $subject = Subjects::visible($type, $loaded);
+        } else {
+            // The eager load's default scope skips soft-deleted subjects; gone otherwise.
+            $subject = $type->allowsTrashedSubject() ? Subjects::find($type, $item->subject_type, $item->subject_id) : null;
+        }
+
+        return Access::allows($type, $this->recipient, $subject, true);
     }
 
     private function label(string $key): string

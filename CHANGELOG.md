@@ -32,6 +32,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - `PreferencesHandle::muted($type)` is `false` for a type that sends no mail (it was `true`).
 - `NotificationPreferenceChanged` fires only when a write changed the stored override; a repeated
   mute, an unmute of an untouched type or a reset of untouched preferences fires nothing.
+- Performance: with `notifications.inbox.recheck_on_read` on, reading the inbox reuses the
+  subjects the query already loaded instead of reading each one again (10 items: 2 queries instead
+  of 12).
 - Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
 
 ### Fixed

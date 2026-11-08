@@ -29,6 +29,14 @@ final class Subjects
         return self::present($type, ModelRefs::find($morphType, $id, withTrashed: true));
     }
 
+    /**
+     * A subject already loaded, unless it is soft-deleted and the type does not allow that.
+     */
+    public static function visible(NotificationType $type, ?Model $subject): ?Model
+    {
+        return self::present($type, $subject);
+    }
+
     private static function present(NotificationType $type, ?Model $subject): ?Model
     {
         if ($subject === null) {

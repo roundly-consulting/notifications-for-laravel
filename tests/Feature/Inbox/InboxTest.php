@@ -21,6 +21,7 @@ use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
@@ -340,6 +341,44 @@ it('hides items the reader lost access to when recheck on read is on', function 
         ->and(Notifications::inbox($approver)->paginate()->count())->toBe(1)
         ->and(Notifications::inbox($approver)->cursorPaginate()->count())->toBe(1)
         ->and(Notifications::inbox($approver)->unreadCount())->toBe(2);
+});
+
+it('rechecks access on read without one query per item', function (): void {
+    $reader = user();
+    $author = user();
+
+    foreach (range(1, 10) as $n) {
+        Notifications::send('comment.posted', post($author), $reader, ['title' => "Post {$n}"]);
+    }
+
+    $queries = function (bool $recheck) use ($reader): int {
+        config()->set('notifications.inbox.recheck_on_read', $recheck);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $items = Notifications::inbox($reader)->get();
+        DB::disableQueryLog();
+
+        expect($items)->toHaveCount(10);
+
+        return count(DB::getQueryLog());
+    };
+
+    expect($queries(true))->toBe($queries(false));
+});
+
+it('hides a trashed subject on recheck unless the type allows trashed subjects', function (): void {
+    config()->set('notifications.inbox.recheck_on_read', true);
+    Notifications::define('post.archived')->subject(Post::class, allowsTrashed: true)->title(fn (): string => 'x')->register();
+    $reader = user();
+    $kept = post();
+    $hidden = post();
+    Notifications::send('post.archived', $kept, $reader);
+    Notifications::send('comment.posted', $hidden, $reader, ['title' => 'x']);
+
+    $kept->delete();
+    $hidden->delete();
+
+    expect(Notifications::inbox($reader)->get()->pluck('type')->all())->toBe(['post.archived']);
 });
 
 it('archives or deletes items when their subject is deleted, as configured', function (string $mode, int $active, int $archived): void {
