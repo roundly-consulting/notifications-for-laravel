@@ -50,6 +50,7 @@ final readonly class PreferencesHandle
 
     /**
      * Mute a type: mail only, or every mutable channel when inbox muting is on (or one channel).
+     * A type with no channel that can be switched off throws LockedNotificationChannelException.
      */
     public function mute(string $type, ?Channel $channel = null): self
     {
@@ -187,11 +188,14 @@ final readonly class PreferencesHandle
     }
 
     /**
-     * Whether the type's mail is off for this user.
+     * Whether the type's mail is off for this user — false for a type that sends no mail.
      */
     public function muted(string $type): bool
     {
-        return ! $this->enabled($type, Channel::Mail);
+        $definition = app(TypeRegistry::class)->find($type);
+
+        return in_array(Channel::Mail, $definition->channels(), true)
+            && ! Preferences::enabled($definition, Channel::Mail, $this->user);
     }
 
     /**
@@ -266,9 +270,12 @@ final readonly class PreferencesHandle
 
         $definition = app(TypeRegistry::class)->find($type);
 
+        // A mandatory type keeps its channels, so the action refuses it as mandatory.
         return array_values(array_filter(
             $this->defaultMuteChannels(),
-            static fn (Channel $candidate): bool => in_array($candidate, $definition->channels(), true),
+            static fn (Channel $candidate): bool => $definition->mandatory()
+                ? in_array($candidate, $definition->channels(), true)
+                : Preferences::switchable($definition, $candidate),
         ));
     }
 

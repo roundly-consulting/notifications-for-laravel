@@ -51,6 +51,8 @@ final readonly class SetCategoryPreferenceAction
             return [$map, [$old, $map['categories'][$category] ?? []]];
         });
 
-        Event::dispatch(new NotificationPreferenceChanged($user, 'category', [$category => $old], [$category => $new]));
+        if (! Preferences::sameChannels($old, $new)) {
+            Event::dispatch(new NotificationPreferenceChanged($user, 'category', [$category => $old], [$category => $new]));
+        }
     }
 }

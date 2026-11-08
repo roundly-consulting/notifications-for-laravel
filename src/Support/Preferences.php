@@ -89,6 +89,26 @@ final class Preferences
         return $type->mandatory() || ($channel === Channel::Inbox && ! NotificationsConfig::inboxMutable());
     }
 
+    /**
+     * Whether the user can switch the channel of the type off: the type has it and it is not locked.
+     */
+    public static function switchable(NotificationType $type, Channel $channel): bool
+    {
+        return in_array($channel, $type->channels(), true) && ! self::locked($type, $channel);
+    }
+
+    /**
+     * @param  array<string, bool>  $old
+     * @param  array<string, bool>  $new
+     */
+    public static function sameChannels(array $old, array $new): bool
+    {
+        ksort($old);
+        ksort($new);
+
+        return $old === $new;
+    }
+
     public static function digest(Model $user): DigestPreferenceData
     {
         $stored = self::read(DigestPreference::class, $user);

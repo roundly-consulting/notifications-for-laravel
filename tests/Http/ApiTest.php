@@ -239,6 +239,18 @@ it('rejects unknown channel keys and unknown type keys in PATCH /preferences', f
     'unknown type' => [['channels' => ['comment.posted' => ['mail' => false], 'nope.type' => ['mail' => false]]], 'channels.nope.type'],
 ]);
 
+it('rejects switching off the locked inbox in PATCH /preferences', function (): void {
+    $user = user();
+
+    $response = $this->actingAs($user)->patchJson('/notifications/preferences', [
+        'channels' => ['request.awaiting_approval' => ['mail' => false, 'inbox' => false]],
+    ])->assertUnprocessable();
+
+    expect(array_keys($response->json('errors')))->toBe(['channels.request.awaiting_approval.inbox'])
+        ->and($response->json('errors')['channels.request.awaiting_approval.inbox'][0])->toBe('The "In-app" channel of the notification "request.awaiting_approval" cannot be switched off.')
+        ->and(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+});
+
 it('rejects unknown categories in PATCH /preferences', function (): void {
     $user = user();
     $junk = [];

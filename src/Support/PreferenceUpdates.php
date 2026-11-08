@@ -9,6 +9,7 @@ use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidQuietHoursException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidTimezoneException;
+use RoundlyConsulting\Notifications\Exceptions\LockedNotificationChannelException;
 use RoundlyConsulting\Notifications\Exceptions\MandatoryNotificationException;
 use RoundlyConsulting\Notifications\Exceptions\NotificationsException;
 use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationCategoryException;
@@ -39,10 +40,14 @@ final class PreferenceUpdates
             }
 
             foreach ($channels as $channel => $enabled) {
-                if (Channel::tryFrom($channel) === null) {
+                $case = Channel::tryFrom($channel);
+
+                if ($case === null) {
                     $problems["channels.{$key}"] = InvalidNotificationDataException::unknownChannel($channel);
                 } elseif ($enabled === false && $type->mandatory()) {
                     $problems["channels.{$key}.{$channel}"] = MandatoryNotificationException::forType($key);
+                } elseif ($enabled === false && ! Preferences::switchable($type, $case)) {
+                    $problems["channels.{$key}.{$channel}"] = LockedNotificationChannelException::forChannel($key, $case);
                 }
             }
         }

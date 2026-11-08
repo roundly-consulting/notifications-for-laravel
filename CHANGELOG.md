@@ -8,6 +8,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ### Changed
 
+- Behaviour change: switching off a channel that cannot be switched off now throws
+  `LockedNotificationChannelException` (422, code `notification_channel_locked`) instead of
+  storing an override that was then ignored. That covers the inbox while
+  `notifications.preferences.inbox_mutable` is off, a channel the type does not deliver on, and
+  `mute($type)` on a type with no such channel. `PATCH /preferences` answers 422 under
+  `channels.<type>.<channel>` where it used to answer 200. Switching such a channel on stores
+  nothing.
+- `PreferencesHandle::muted($type)` is `false` for a type that sends no mail (it was `true`).
+- `NotificationPreferenceChanged` fires only when a write changed the stored override; a repeated
+  mute, an unmute of an untouched type or a reset of untouched preferences fires nothing.
 - Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
 
 ### Fixed

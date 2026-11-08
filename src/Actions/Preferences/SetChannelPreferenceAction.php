@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Events\NotificationPreferenceChanged;
+use RoundlyConsulting\Notifications\Exceptions\LockedNotificationChannelException;
 use RoundlyConsulting\Notifications\Exceptions\MandatoryNotificationException;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Support\Preferences;
@@ -15,7 +16,10 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
  * Sets (true/false) or clears (null — back to the category and type default) one channel of one
- * type for one user. Muting a mandatory type throws.
+ * type for one user. Muting a mandatory type throws; so does switching off a locked channel (the
+ * inbox unless inbox muting is on) or a channel the type lacks, and muting with no channel left.
+ * Switching such a channel on stores nothing — it is always on, or never there. The event fires
+ * only when the stored override changed.
  */
 final readonly class SetChannelPreferenceAction
 {
@@ -32,6 +36,24 @@ final readonly class SetChannelPreferenceAction
 
         if ($enabled === false && $definition->mandatory()) {
             throw MandatoryNotificationException::forType($type);
+        }
+
+        if ($enabled === false && $channels === []) {
+            throw LockedNotificationChannelException::nothingToMute($type);
+        }
+
+        foreach ($channels as $channel) {
+            if ($enabled === false && ! Preferences::switchable($definition, $channel)) {
+                throw LockedNotificationChannelException::forChannel($type, $channel);
+            }
+        }
+
+        if ($enabled === true) {
+            $channels = array_values(array_filter($channels, static fn (Channel $channel): bool => Preferences::switchable($definition, $channel)));
+
+            if ($channels === []) {
+                return;
+            }
         }
 
         [$old, $new] = Preferences::write(ChannelPreferences::class, $user, function (mixed $current) use ($type, $channels, $enabled): array {
@@ -53,6 +75,8 @@ final readonly class SetChannelPreferenceAction
             return [$map, [$old, $map['types'][$type] ?? []]];
         });
 
-        Event::dispatch(new NotificationPreferenceChanged($user, 'type', [$type => $old], [$type => $new]));
+        if (! Preferences::sameChannels($old, $new)) {
+            Event::dispatch(new NotificationPreferenceChanged($user, 'type', [$type => $old], [$type => $new]));
+        }
     }
 }

@@ -20,6 +20,8 @@ final readonly class ResetPreferencesAction
     {
         $old = Preferences::write(ChannelPreferences::class, $user, static fn (mixed $current): array => [null, Preferences::normaliseMap($current)]);
 
-        Event::dispatch(new NotificationPreferenceChanged($user, 'reset', $old, null));
+        if ($old !== ['types' => [], 'categories' => []]) {
+            Event::dispatch(new NotificationPreferenceChanged($user, 'reset', $old, null));
+        }
     }
 }

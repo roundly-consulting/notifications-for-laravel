@@ -27,6 +27,8 @@ return [
     'no_owner_subject' => 'Recipients::owner() needs a subject.',
     'missing_access_check' => 'The notification type ":type" checks the ":ability" ability on :subject, but :subject has no policy and the ability is not defined.',
     'mandatory_notification' => 'The notification ":type" is required and cannot be switched off.',
+    'notification_channel_locked' => 'The ":channel" channel of the notification ":type" cannot be switched off.',
+    'notification_nothing_to_mute' => 'The notification ":type" has no channel that can be switched off.',
     'inbox_item_not_found' => 'The notification was not found.',
     'invalid_quiet_hours' => 'Quiet hours must start and end at different times.',
     'invalid_time' => '":value" is not a time such as 22:00.',

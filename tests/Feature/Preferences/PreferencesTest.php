@@ -24,6 +24,7 @@ use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationsConfigurationException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidQuietHoursException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidTimezoneException;
+use RoundlyConsulting\Notifications\Exceptions\LockedNotificationChannelException;
 use RoundlyConsulting\Notifications\Exceptions\MandatoryNotificationException;
 use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationCategoryException;
 use RoundlyConsulting\Notifications\Exceptions\UnknownNotificationTypeException;
@@ -173,6 +174,81 @@ it('drops stored overrides of categories no registered type uses', function (): 
     Notifications::preferences($user)->mute('comment.posted');
 
     expect(Preferences::channelMap($user))->toBe(['types' => ['comment.posted' => ['mail' => false]], 'categories' => []]);
+});
+
+it('refuses switching off a locked inbox or a channel the type lacks', function (Closure $write, string $message): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    Notifications::define('inbox.only')->channels(Channel::Inbox)->title(fn (): string => 'x')->register();
+    $user = user();
+
+    expect(fn () => $write(Notifications::preferences($user)))->toThrow(LockedNotificationChannelException::class, $message);
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+    Event::assertNotDispatched(NotificationPreferenceChanged::class);
+
+    try {
+        $write(Notifications::preferences($user));
+    } catch (LockedNotificationChannelException $exception) {
+        expect($exception->errorCode())->toBe('notification_channel_locked')
+            ->and($exception->status())->toBe(422);
+    }
+
+    app()->setLocale('sk');
+    expect(fn () => $write(Notifications::preferences($user)))->toThrow(LockedNotificationChannelException::class, 'nemožno vypnúť');
+})->with([
+    'locked inbox' => [fn (PreferencesHandle $preferences) => $preferences->set('request.awaiting_approval', Channel::Inbox, false), 'The "In-app" channel of the notification "request.awaiting_approval" cannot be switched off.'],
+    'mute the locked inbox' => [fn (PreferencesHandle $preferences) => $preferences->mute('request.awaiting_approval', Channel::Inbox), 'The "In-app" channel of the notification "request.awaiting_approval" cannot be switched off.'],
+    'channel the type lacks' => [fn (PreferencesHandle $preferences) => $preferences->set('inbox.only', Channel::Mail, false), 'The "Email" channel of the notification "inbox.only" cannot be switched off.'],
+    'update' => [fn (PreferencesHandle $preferences) => $preferences->update(new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false], 'request.awaiting_approval' => ['inbox' => false]])), 'The "In-app" channel of the notification "request.awaiting_approval" cannot be switched off.'],
+]);
+
+it('writes nothing for switching on or clearing a locked channel', function (): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    Notifications::define('inbox.only')->channels(Channel::Inbox)->title(fn (): string => 'x')->register();
+    $user = user();
+
+    Notifications::preferences($user)
+        ->set('request.awaiting_approval', Channel::Inbox, true)
+        ->unmute('request.awaiting_approval', Channel::Inbox)
+        ->set('inbox.only', Channel::Mail, true)
+        ->update(new PreferencesUpdate(channels: ['request.awaiting_approval' => ['inbox' => true]]));
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+    Event::assertNotDispatched(NotificationPreferenceChanged::class);
+});
+
+it('refuses muting a type with no mutable channel and reports it unmuted', function (): void {
+    Notifications::define('inbox.only')->channels(Channel::Inbox)->title(fn (): string => 'x')->register();
+    $user = user();
+
+    expect(fn () => Notifications::preferences($user)->mute('inbox.only'))
+        ->toThrow(LockedNotificationChannelException::class, 'The notification "inbox.only" has no channel that can be switched off.')
+        ->and(Notifications::preferences($user)->muted('inbox.only'))->toBeFalse()
+        ->and(Notifications::preferences($user)->muted('comment.posted'))->toBeFalse();
+
+    config()->set('notifications.preferences.inbox_mutable', true);
+    Notifications::preferences($user)->mute('inbox.only');
+
+    expect(Notifications::preferences($user)->enabled('inbox.only', Channel::Inbox))->toBeFalse()
+        ->and(Notifications::preferences($user)->muted('inbox.only'))->toBeFalse();
+});
+
+it('dispatches no preference event for a write that changes nothing', function (): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    $user = user();
+
+    Notifications::preferences($user)
+        ->unmute('comment.posted')
+        ->unmuteCategory('comments')
+        ->reset()
+        ->update(new PreferencesUpdate(categories: ['comments' => ['mail' => true]]));
+
+    Event::assertNotDispatched(NotificationPreferenceChanged::class);
+
+    Notifications::preferences($user)->mute('comment.posted')->mute('comment.posted')->muteCategory('requests')->muteCategory('requests');
+    Notifications::preferences($user)->update(new PreferencesUpdate(channels: ['comment.posted' => ['mail' => false]], categories: ['requests' => ['mail' => false]]));
+
+    Event::assertDispatchedTimes(NotificationPreferenceChanged::class, 2);
 });
 
 function fullPreferencesUpdate(): PreferencesUpdate

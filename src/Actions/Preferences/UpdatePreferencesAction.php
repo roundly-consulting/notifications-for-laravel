@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Notifications\Actions\Preferences;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
+use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Events\NotificationPreferenceChanged;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Support\Preferences;
@@ -16,7 +17,7 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
 /**
  * Applies several preference changes at once — all or nothing. Everything is validated before the
  * first write (an unknown type, category or channel, a mandatory type switched off, a bad time or
- * timezone throws), then every write runs under one preference lock in one transaction, so a
+ * timezone throws, and so does switching off a locked channel), then every write runs under one preference lock in one transaction, so a
  * failure half way leaves the user's settings as they were. One `NotificationPreferenceChanged`
  * per changed type, category and setting, after the commit.
  */
@@ -69,13 +70,21 @@ final readonly class UpdatePreferencesAction
         $events = [];
 
         foreach ($update->channels as $type => $channels) {
+            $definition = $this->types->find($type);
             $old = $map['types'][$type] ?? [];
 
             foreach ($channels as $channel => $enabled) {
-                $map['types'][$type][$channel] = $enabled;
+                // Validated: a `false` here is switchable; a `true` on a locked channel stores nothing.
+                if (Preferences::switchable($definition, Channel::from($channel))) {
+                    $map['types'][$type][$channel] = $enabled;
+                }
             }
 
-            $events[] = new NotificationPreferenceChanged($user, 'type', [$type => $old], [$type => $map['types'][$type]]);
+            $new = $map['types'][$type] ?? [];
+
+            if (! Preferences::sameChannels($old, $new)) {
+                $events[] = new NotificationPreferenceChanged($user, 'type', [$type => $old], [$type => $new]);
+            }
         }
 
         foreach ($update->categories as $category => $channels) {
@@ -93,7 +102,11 @@ final readonly class UpdatePreferencesAction
                 unset($map['categories'][$category]);
             }
 
-            $events[] = new NotificationPreferenceChanged($user, 'category', [$category => $old], [$category => $map['categories'][$category] ?? []]);
+            $new = $map['categories'][$category] ?? [];
+
+            if (! Preferences::sameChannels($old, $new)) {
+                $events[] = new NotificationPreferenceChanged($user, 'category', [$category => $old], [$category => $new]);
+            }
         }
 
         return [$map, $events];
