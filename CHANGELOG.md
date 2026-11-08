@@ -94,6 +94,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A preference write that cannot get the user's preference lock in time throws
   `PreferencesLockedException` (423, `preferences_locked`, a translated "try again" message)
   instead of Laravel's `LockTimeoutException`; `PATCH /preferences` answered 500.
+- The Laravel `inbox` channel (`Notifications::inboxMessage()`) also re-reads the subject before
+  the access check: a message about a soft-deleted subject, or one that changed since it was
+  loaded, no longer gets an inbox item.
 
 ## 1.1.0 - 2026-11-08
 

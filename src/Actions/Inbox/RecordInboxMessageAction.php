@@ -18,6 +18,7 @@ use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\Payloads;
 use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Support\PreparedSend;
+use RoundlyConsulting\Notifications\Support\Subjects;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
 /**
@@ -46,14 +47,19 @@ final readonly class RecordInboxMessageAction
         KeyTypes::assert($subject, 'subject');
         KeyTypes::assert($message->actor, 'actor');
 
-        if (! Access::allows($type, $recipient, $subject, $subject !== null) || ! Preferences::enabled($type, Channel::Inbox, $recipient)) {
+        // As for a send: access is checked on the subject as it is now (soft-deleted, or changed
+        // since the caller loaded it); gone is no access.
+        $given = $subject !== null;
+        $subject = $given ? Subjects::fresh($type, $subject) : null;
+
+        if (! Access::allows($type, $recipient, $subject, $given) || ! Preferences::enabled($type, Channel::Inbox, $recipient)) {
             return null;
         }
 
         $send = new PreparedSend(
             type: $type,
             subject: $subject,
-            subjectGiven: $subject !== null,
+            subjectGiven: $given,
             data: Payloads::assertJson($message->data),
             actor: $message->actor,
             context: Contexts::resolve($message->context ?? $type->context($subject)),

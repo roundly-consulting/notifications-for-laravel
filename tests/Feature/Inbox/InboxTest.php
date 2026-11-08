@@ -18,6 +18,7 @@ use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationDataException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Handles\InboxHandle;
+use RoundlyConsulting\Notifications\Mail\InboxMessage;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
@@ -516,3 +517,18 @@ it('filters the inbox by a type class as by its key', function (): void {
         ->and(Notifications::inbox($user)->type(SecurityAlert::class)->markAllRead())->toBe(1)
         ->and(Notifications::inbox($user)->unreadCount())->toBe(1);
 });
+
+it('writes no channel message about a soft-deleted or changed subject', function (Closure $change): void {
+    $author = user();
+    $reader = user();
+    $post = post($author);
+    $change($post);
+
+    $item = Notifications::inboxMessage($reader, (new InboxMessage('comment.posted'))->about($post)->with(['title' => 'x']));
+
+    expect($item)->toBeNull()
+        ->and(InboxItem::query()->count())->toBe(0);
+})->with([
+    'soft-deleted' => [fn (Post $post) => Post::query()->whereKey($post->id)->delete()],
+    'made private since it was loaded' => [fn (Post $post) => Post::query()->whereKey($post->id)->update(['private' => true])],
+]);
