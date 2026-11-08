@@ -92,6 +92,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - An ad-hoc relative reminder (`remind($type, Reminder::before(...))`) skips offsets that are
   already past, like a type rule does. They were scheduled and then fired all at once on the next
   sweep.
+- Month and year reminder offsets no longer overflow: a month before 31 March is 28 February
+  (it was 3 March), and a year after 29 February is 28 February.
 
 ## 1.0.0 - 2026-11-07
 

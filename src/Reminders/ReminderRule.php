@@ -184,7 +184,7 @@ final class ReminderRule
     /**
      * The due instant (UTC) for an anchor and a signed offset. Time offsets are absolute; calendar
      * offsets are applied on the anchor's wall clock in the app timezone, so "7 days before 09:00"
-     * stays 09:00 local across a DST change.
+     * stays 09:00 local across a DST change. Months and years clamp to the month's last day.
      */
     public static function dueAt(CarbonImmutable $anchor, string $signedOffset): CarbonImmutable
     {
@@ -194,8 +194,12 @@ final class ReminderRule
         $timezone = config('app.timezone');
         $local = $anchor->setTimezone(is_string($timezone) && $timezone !== '' ? $timezone : 'UTC');
 
-        $calendar = CarbonInterval::create($interval->y, $interval->m, 0, $interval->d);
-        $local = $before ? $local->sub($calendar) : $local->add($calendar);
+        // Months and years without overflow (a month before 31 March is 28 February, not 3 March),
+        // then the days.
+        $months = $interval->y * 12 + $interval->m;
+        $local = $before
+            ? $local->subMonthsNoOverflow($months)->subDays($interval->d)
+            : $local->addMonthsNoOverflow($months)->addDays($interval->d);
 
         $seconds = $interval->h * 3600 + $interval->i * 60 + $interval->s;
 

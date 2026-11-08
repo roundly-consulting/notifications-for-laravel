@@ -103,3 +103,16 @@ it('treats an unparsable or zero CarbonInterval as no duration', function (): vo
         ->and(Durations::lenient(CarbonInterval::seconds(0)))->toBeNull()
         ->and(Durations::lenient(CarbonInterval::minutes(5))?->i)->toBe(5);
 });
+
+it('applies month offsets without overflow', function (string $anchor, string $offset, string $due): void {
+    expect(ReminderRule::dueAt(CarbonImmutable::parse($anchor, 'UTC'), $offset)->format('Y-m-d H:i'))->toBe($due);
+})->with([
+    'a month before 31 March' => ['2026-03-31 09:00:00', '-P1M', '2026-02-28 09:00'],
+    'a month after 31 January' => ['2026-01-31 09:00:00', 'P1M', '2026-02-28 09:00'],
+    'a month before 31 May' => ['2026-05-31 09:00:00', '-P1M', '2026-04-30 09:00'],
+    'a year after 29 February' => ['2028-02-29 09:00:00', 'P1Y', '2029-02-28 09:00'],
+    'a year before 29 February' => ['2028-02-29 09:00:00', '-P1Y', '2027-02-28 09:00'],
+    'a month and a day before 31 March' => ['2026-03-31 09:00:00', '-P1M1D', '2026-02-27 09:00'],
+    'days are unchanged' => ['2026-03-31 09:00:00', '-P30D', '2026-03-01 09:00'],
+    'time stays absolute' => ['2026-03-31 09:00:00', '-P1MT2H', '2026-02-28 07:00'],
+]);
