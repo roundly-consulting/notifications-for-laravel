@@ -520,6 +520,11 @@ it('stamps updated_at on every claim, so prune ages claimed rows from the claim 
         ->and(DigestRuns::claim($run))->toBeTrue()
         ->and(ReminderClaims::claim($reminder->id))->toBeTrue();
 
+    // A digest run is queued by the claim; its job stamps claimed_at when it starts (O-1).
+    expect($run->fresh()?->claimed_at)->toBeNull()
+        ->and(DigestRuns::begin($run))->toBeTrue()
+        ->and(DigestRuns::begin($run))->toBeFalse();
+
     foreach ([$delivery, $run, $reminder] as $row) {
         $fresh = $row->fresh();
 

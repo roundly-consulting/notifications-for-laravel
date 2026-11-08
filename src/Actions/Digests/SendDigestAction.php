@@ -49,7 +49,7 @@ final readonly class SendDigestAction
     {
         $run = NotificationModels::digestRun()::query()->find($runId);
 
-        if ($run === null || $run->status !== DigestRunStatus::Sending) {
+        if ($run === null || $run->status !== DigestRunStatus::Sending || ! DigestRuns::begin($run)) {
             return;
         }
 

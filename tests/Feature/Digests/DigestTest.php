@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Illuminate\Notifications\ChannelManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
+use RoundlyConsulting\Notifications\Actions\Digests\SendDigestAction;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
@@ -337,4 +339,46 @@ it('falls back to the type label when a digest line throws', function (): void {
     $html = (string) Notifications::digests()->preview($reader)?->render();
 
     expect($html)->toContain('Broken digest type (2)');
+});
+
+it('sends a digest whose job waited in the queue longer than the digest lease', function (): void {
+    $reader = digestReader();
+    Notifications::send('comment.posted', post(), $reader, ['title' => 'A']);
+    Queue::fake([SendDigestJob::class]);
+
+    at('2026-11-09 08:00:01');
+    Notifications::sweep();
+    at('2026-11-09 08:16:02');
+    Notifications::sweep();
+
+    $run = DigestRun::query()->sole();
+    expect($run->status)->toBe(DigestRunStatus::Sending)
+        ->and(NotificationDelivery::query()->sole()->status)->toBe(DeliveryStatus::Digest);
+
+    app(SendDigestAction::class)->execute($run->id);
+
+    Notification::assertSentToTimes($reader, DigestMailNotification::class, 1);
+    expect($run->fresh()?->status)->toBe(DigestRunStatus::Sent);
+});
+
+it('dispatches a waiting digest again after the lease, and sends it once', function (): void {
+    $reader = digestReader();
+    Notifications::send('comment.posted', post(), $reader, ['title' => 'A']);
+    Queue::fake([SendDigestJob::class]);
+
+    at('2026-11-09 08:00:01');
+    Notifications::sweep();
+    at('2026-11-09 08:05:00');
+    Notifications::sweep();
+    Queue::assertPushed(SendDigestJob::class, 1);
+
+    at('2026-11-09 08:16:02');
+    Notifications::sweep();
+    Queue::assertPushed(SendDigestJob::class, 2);
+
+    $run = DigestRun::query()->sole();
+    app(SendDigestAction::class)->execute($run->id);
+    app(SendDigestAction::class)->execute($run->id);
+
+    Notification::assertSentToTimes($reader, DigestMailNotification::class, 1);
 });

@@ -76,6 +76,19 @@ final readonly class SendDueDigestsAction
             }
         }
 
+        // Runs still queued after the lease: their job is slow or was lost. Dispatch again — the
+        // job's start is a compare-and-set, so only one of them sends.
+        $waiting = NotificationModels::digestRun()::query()
+            ->where('status', DigestRunStatus::Sending->value)
+            ->whereNull('claimed_at')
+            ->where('updated_at', '<', $now->sub(NotificationsConfig::digestLease())->format(Clock::FORMAT))
+            ->get();
+
+        foreach ($waiting as $run) {
+            $run->touch();
+            Queues::dispatch(new SendDigestJob(ModelRefs::key($run)));
+        }
+
         return $started;
     }
 

@@ -55,14 +55,30 @@ final class DigestRuns
         return $run;
     }
 
+    /**
+     * The sweep's claim: `pending → sending`, queued. `claimed_at` stays empty until the job
+     * starts ({@see self::begin()}), so time spent waiting in the queue never counts against
+     * `digest.lease` — the lease is for a worker that died while sending.
+     */
     public static function claim(DigestRun $run): bool
     {
-        $now = Clock::now()->format(Clock::FORMAT);
-
         return NotificationModels::digestRun()::query()
             ->whereKey($run->getKey())
             ->where('status', DigestRunStatus::Pending->value)
-            ->incrementEach(['attempts' => 1], ['status' => DigestRunStatus::Sending->value, 'claimed_at' => $now]) > 0;
+            ->incrementEach(['attempts' => 1], ['status' => DigestRunStatus::Sending->value, 'claimed_at' => null]) > 0;
+    }
+
+    /**
+     * The job's start: stamps `claimed_at` on a queued run. False when another job (a re-dispatch
+     * of the same run) already started it.
+     */
+    public static function begin(DigestRun $run): bool
+    {
+        return NotificationModels::digestRun()::query()
+            ->whereKey($run->getKey())
+            ->where('status', DigestRunStatus::Sending->value)
+            ->whereNull('claimed_at')
+            ->update(['claimed_at' => Clock::now()->format(Clock::FORMAT)]) > 0;
     }
 
     /**
