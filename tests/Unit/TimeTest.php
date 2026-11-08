@@ -96,3 +96,10 @@ it('reads durations strictly or leniently', function (): void {
         ->and(Durations::toIso(Durations::iso('P1Y2M3DT4H5M6S')))->toBe('P1Y2M3DT4H5M6S')
         ->and(Durations::toIso(CarbonInterval::seconds(0)))->toBe('PT0S');
 });
+
+it('treats an unparsable or zero CarbonInterval as no duration', function (): void {
+    expect(Durations::iso('P99999999999999999999D'))->toBeNull()
+        ->and(Durations::lenient('P99999999999999999999D'))->toBeNull()
+        ->and(Durations::lenient(CarbonInterval::seconds(0)))->toBeNull()
+        ->and(Durations::lenient(CarbonInterval::minutes(5))?->i)->toBe(5);
+});

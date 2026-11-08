@@ -275,11 +275,6 @@ final class NotificationsConfig
         return new QuietHours($value['start'], $value['end']);
     }
 
-    public static function timezoneResolver(): ?string
-    {
-        return self::optionalString('notifications.timezone.resolver', config('notifications.timezone.resolver'));
-    }
-
     public static function timezoneAttribute(): ?string
     {
         return self::optionalString('notifications.timezone.attribute', config('notifications.timezone.attribute'));

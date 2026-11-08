@@ -36,13 +36,6 @@ final class Windows
         return $interval;
     }
 
-    public static function seconds(NotificationType $type): ?int
-    {
-        $interval = self::of($type);
-
-        return $interval === null ? null : Durations::seconds($interval);
-    }
-
     /**
      * Urgent types always mail on the leading edge.
      */

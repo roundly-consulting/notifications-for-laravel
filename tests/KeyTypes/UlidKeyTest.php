@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use RoundlyConsulting\Notifications\Facades\Notifications;
@@ -21,4 +22,13 @@ it('runs the whole pipeline with ulid ids', function (): void {
     expect(Str::isUlid(InboxItem::query()->first()->id))->toBeTrue()
         ->and(NotificationReminder::query()->where('status', 'sent')->count())->toBe(1)
         ->and(Str::isUlid((string) InboxItem::query()->whereNotNull('reminder_id')->sole()->reminder_id))->toBeTrue();
+});
+
+it('route-binds only a valid key', function (): void {
+    Notification::fake();
+    Notifications::send('security.alert', null, user());
+    $item = InboxItem::query()->sole();
+
+    expect((new InboxItem)->resolveRouteBinding($item->id)?->is($item))->toBeTrue()
+        ->and(fn () => (new InboxItem)->resolveRouteBinding('not-a-ulid'))->toThrow(ModelNotFoundException::class);
 });

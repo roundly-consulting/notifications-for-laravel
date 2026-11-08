@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterval;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
@@ -30,6 +31,7 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
+use RoundlyConsulting\Notifications\Traits\HasNotificationReminders;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Testing\Fixtures\LockRecorder;
 use RoundlyConsulting\Testing\Fixtures\LockRecordingGrammar;
@@ -603,4 +605,54 @@ it('refuses an ad-hoc reminder with an escalation, a condition or acknowledgedOn
     'escalation' => [fn (User $manager): ReminderRule => Reminder::at(now()->addHour())->escalate('PT1H', $manager)],
     'condition' => [fn (): ReminderRule => Reminder::before('expires_at', 'P1D')->while(fn (): bool => true)],
     'acknowledged on read' => [fn (): ReminderRule => Reminder::at(now()->addHour())->acknowledgedOnRead()],
+]);
+
+it('moves an ad-hoc reminder when its own anchor changes', function (): void {
+    $contract = expiringContract();
+    $contract->forceFill(['terminated_at' => CarbonImmutable::parse('2026-11-19 10:00:00', 'UTC')])->save();
+    Notifications::for($contract)->remind('contract.expiring', Reminder::before('terminated_at', 'P1D'), to: $contract->owner);
+
+    $adHoc = fn () => NotificationReminder::query()->where('anchor', 'terminated_at')->where('status', ReminderStatus::Pending->value)->sole();
+    expect($adHoc()->due_at->format('Y-m-d'))->toBe('2026-11-18');
+
+    $contract->forceFill(['terminated_at' => CarbonImmutable::parse('2026-11-29 10:00:00', 'UTC')])->save();
+
+    expect($adHoc()->due_at->format('Y-m-d'))->toBe('2026-11-28');
+});
+
+it('does nothing on save for a reminder subject with no types', function (): void {
+    $fake = Notifications::fake();
+    $company = new class extends Model
+    {
+        use HasNotificationReminders;
+
+        protected $table = 'companies';
+
+        protected $guarded = [];
+    };
+
+    $company->forceFill(['name' => 'Typeless'])->save();
+    $company->forceFill(['name' => 'Renamed'])->save();
+
+    $fake->assertNoRemindersScheduled();
+});
+
+it('skips acknowledge-on-read for a gone reminder or type', function (Closure $break): void {
+    Notifications::define('ack.read')->subject(Contract::class)
+        ->reminders(Reminder::before('expires_at', 'P1D')->to(Recipients::owner())->acknowledgedOnRead()->escalate('P1D', Recipients::owner()))
+        ->title(fn (): string => 'x')->register();
+    $contract = expiringContract('2026-11-11 10:00:00');
+    at('2026-11-10 10:00:00');
+    Notifications::sweep();
+    $item = InboxItem::query()->where('type', 'ack.read')->sole();
+
+    $break($item);
+    Notifications::inbox($contract->owner)->markRead($item);
+
+    expect($item->fresh()->read_at)->not->toBeNull()
+        ->and(NotificationReminder::query()->where('kind', 'escalation')->sole()->status)->toBe(ReminderStatus::Pending);
+})->with([
+    'reminder row gone' => [fn (InboxItem $item) => NotificationReminder::query()->whereKey($item->reminder_id)->forceDelete()],
+    'type gone' => [fn (InboxItem $item) => NotificationReminder::query()->whereKey($item->reminder_id)->update(['type' => 'gone.type'])],
+    'rule gone' => [fn (InboxItem $item) => NotificationReminder::query()->whereKey($item->reminder_id)->update(['rule' => 'gone:rule'])],
 ]);

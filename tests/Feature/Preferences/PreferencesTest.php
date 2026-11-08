@@ -598,3 +598,12 @@ it('recovers the preference lock after a host transaction rolled back', function
 
     expect(array_keys(Preferences::channelMap($user)['types']))->toBe(['request.awaiting_approval']);
 });
+
+it('reads a channel the type lacks as off and a stored value that is no map as empty', function (): void {
+    Notifications::define('inbox.only')->channels(Channel::Inbox)->title(fn (): string => 'x')->register();
+    $user = user();
+
+    expect(Notifications::preferences($user)->enabled('inbox.only', Channel::Mail))->toBeFalse()
+        ->and(Notifications::preferences($user)->enabled('inbox.only', Channel::Inbox))->toBeTrue()
+        ->and(Preferences::normaliseMap('junk'))->toBe(['types' => [], 'categories' => []]);
+});

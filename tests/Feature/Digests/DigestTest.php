@@ -19,6 +19,7 @@ use RoundlyConsulting\Notifications\Mail\DigestMailNotification;
 use RoundlyConsulting\Notifications\Models\DigestRun;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\NotificationPayload;
+use RoundlyConsulting\Notifications\NotificationType;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
 
@@ -288,4 +289,52 @@ it('previews the digest a user would get, without sending it', function (): void
     Notifications::preferences($reader)->digest(DigestFrequency::Off);
     expect(Notifications::digests()->preview($reader)?->subject)->toBe('Your daily summary: 1 update');
     Notification::assertNothingSent();
+});
+
+it('falls back to the type label when a digest line throws', function (): void {
+    Notifications::registerType(new class extends NotificationType
+    {
+        public function key(): string
+        {
+            return 'digest.broken';
+        }
+
+        public function label(): string
+        {
+            return 'Broken digest type';
+        }
+
+        public function priority(): Priority
+        {
+            return Priority::Low;
+        }
+
+        public function digestible(): bool
+        {
+            return true;
+        }
+
+        public function window(): string
+        {
+            return 'PT10M';
+        }
+
+        public function title(NotificationPayload $payload): string
+        {
+            return 'Broken';
+        }
+
+        public function digestLine(NotificationPayload $payload): string
+        {
+            throw new RuntimeException('cannot render');
+        }
+    });
+    $reader = digestReader();
+
+    Notifications::send('digest.broken', null, $reader);
+    Notifications::send('digest.broken', null, $reader);
+
+    $html = (string) Notifications::digests()->preview($reader)?->render();
+
+    expect($html)->toContain('Broken digest type (2)');
 });

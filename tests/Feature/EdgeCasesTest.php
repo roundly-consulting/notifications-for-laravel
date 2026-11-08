@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\ChannelManager;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\DB;
@@ -526,3 +527,33 @@ it('stamps updated_at on every claim, so prune ages claimed rows from the claim 
             ->and($fresh?->attempts)->toBe(1);
     }
 });
+
+it('registers the Pest expectations once, from the plugin or by hand', function (): void {
+    $registered = new ReflectionProperty(NotificationExpectations::class, 'registered');
+    $registered->setValue(null, false);
+
+    NotificationExpectations::register();
+    NotificationExpectations::register();
+
+    expect($registered->getValue())->toBeTrue()
+        ->and(fn () => expect(user())->toHaveUnreadInboxItems(0))->not->toThrow(Throwable::class);
+});
+
+it('rethrows after three lost unique races', function (string $model, Closure $write): void {
+    $attempts = 0;
+    $model::saving(function () use (&$attempts): void {
+        $attempts++;
+
+        throw new UniqueConstraintViolationException('testing', 'insert', [], new PDOException('duplicate'));
+    });
+
+    expect(fn () => $write())->toThrow(UniqueConstraintViolationException::class)
+        ->and($attempts)->toBe(3);
+})->with([
+    'inbox item' => [InboxItem::class, fn () => Notifications::send('security.alert', null, user())],
+    'mail delivery' => [NotificationDelivery::class, function (): void {
+        Notifications::define('mail.only')->channels(Channel::Mail)->title(fn (): string => 'x')->register();
+        Notifications::send('mail.only', null, user());
+    }],
+    'reminder' => [NotificationReminder::class, fn () => Notifications::for(post())->remind('comment.posted', Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: user())],
+]);

@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use PHPUnit\Framework\ExpectationFailedException;
 use RoundlyConsulting\Notifications\Actions\Sending\SendNotificationAction;
 use RoundlyConsulting\Notifications\Builders\PendingNotification;
+use RoundlyConsulting\Notifications\Context;
 use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
@@ -76,6 +77,25 @@ it('reaches every accessor and handle through the facade', function (): void {
         ->and(Notifications::interop()->mapped())->toBe([])
         ->and(Notifications::sweep()->deliveries)->toBe(0)
         ->and(Notifications::prune()->total())->toBe(0);
+});
+
+it('sends through for()->send(), for()->type() and the builder with by() and in()', function (): void {
+    $approver = user();
+    $actor = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver');
+
+    Notifications::for($request)->send('request.awaiting_approval', $approver, ['reference' => 'A'], actor: $actor);
+    Notifications::for($request)->type('request.awaiting_approval')->to($approver)->with(['reference' => 'B'])
+        ->by($actor)->in(Context::key('billing', 'Billing'))->send();
+
+    $items = InboxItem::query()->orderBy('id')->get();
+
+    expect($items)->toHaveCount(2)
+        ->and($items[0]->context_key)->toBe('company:'.$request->company_id)
+        ->and($items[1]->context_key)->toBe('billing')
+        ->and($items[1]->context_label)->toBe('Billing')
+        ->and($items->every(fn (InboxItem $item): bool => $item->actor?->is($actor) === true && $item->subject?->is($request) === true))->toBeTrue();
 });
 
 describe('the fake', function (): void {

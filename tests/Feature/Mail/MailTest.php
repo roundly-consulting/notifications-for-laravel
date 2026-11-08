@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
+use RoundlyConsulting\Notifications\Actions\Delivery\DeliverMailAction;
 use RoundlyConsulting\Notifications\Contracts\ResolvesMailAddress;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
@@ -451,3 +452,25 @@ final class FixedAddress implements ResolvesMailAddress
         return $this->address;
     }
 }
+
+it('sends nothing when the claimed delivery row is gone', function (): void {
+    [$request, $approver] = mailSetup();
+    Notifications::send('request.awaiting_approval', $request, $approver, ['reference' => 'A']);
+    Notification::fake();
+    $id = delivery()->id;
+
+    NotificationDelivery::query()->whereKey($id)->update(['status' => DeliveryStatus::Pending->value]);
+    $gone = false;
+
+    // Another worker removes the row between this worker's claim and its read.
+    DB::listen(function ($query) use (&$gone, $id): void {
+        if (! $gone && str_starts_with(strtolower($query->sql), 'update') && str_contains($query->sql, 'attempts')) {
+            $gone = true;
+            NotificationDelivery::query()->whereKey($id)->forceDelete();
+        }
+    });
+
+    app(DeliverMailAction::class)->execute($id);
+
+    Notification::assertNothingSent();
+});

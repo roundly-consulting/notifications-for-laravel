@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
@@ -26,4 +27,13 @@ it('runs the whole pipeline with uuid ids', function (): void {
         ->and(NotificationReminder::query()->count())->toBe(3)
         ->and($item->fresh()->read_at)->not->toBeNull()
         ->and(fn () => Notifications::inbox($user)->find('not-a-uuid'))->toThrow(InboxItemNotFoundException::class);
+});
+
+it('route-binds only a valid key', function (): void {
+    Notification::fake();
+    Notifications::send('security.alert', null, user());
+    $item = InboxItem::query()->sole();
+
+    expect((new InboxItem)->resolveRouteBinding($item->id)?->is($item))->toBeTrue()
+        ->and(fn () => (new InboxItem)->resolveRouteBinding('not-a-uuid'))->toThrow(ModelNotFoundException::class);
 });

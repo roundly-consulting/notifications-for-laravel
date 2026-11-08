@@ -50,6 +50,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - Performance: `InboxHandle::counts()` reads every context's label in one query instead of one
   query per context.
 - Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
+- Maintenance: removed two unused internal helpers.
 - Maintenance: delivery, digest and reminder claims use Eloquent's `incrementEach()` again (the
   Laravel 12 workaround is gone); `updated_at` is still stamped on every claim.
 
