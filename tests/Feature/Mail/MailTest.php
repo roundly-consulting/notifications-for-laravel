@@ -519,3 +519,30 @@ it('dispatches a delivery whose job is still queued only once per lease', functi
 
     Queue::assertPushed(DeliverMailJob::class, 2);
 });
+
+it('keeps a held trailing mail behind its window when quiet hours change', function (): void {
+    config()->set('notifications.mail.strategy', 'trailing');
+    Notifications::define('trailing.thing')->window('PT10M')->title(fn (NotificationPayload $p): string => 'Thing x'.$p->count)->register();
+    $user = user();
+    Notifications::preferences($user)->quietHours('10:05', '11:00');
+
+    Notifications::send('trailing.thing', null, $user);
+    expect(delivery()->status)->toBe(DeliveryStatus::Held)
+        ->and(delivery()->send_after->format('H:i'))->toBe('11:00');
+
+    at('2026-11-09 10:02:00');
+    Notifications::preferences($user)->quietHours(null);
+    expect(delivery()->send_after->format('H:i'))->toBe('10:10');
+
+    at('2026-11-09 10:03:00');
+    Notifications::sweep();
+    Notification::assertNothingSent();
+
+    at('2026-11-09 10:06:00');
+    Notifications::send('trailing.thing', null, $user);
+    at('2026-11-09 10:10:00');
+    Notifications::sweep();
+
+    Notification::assertSentToTimes($user, TypedMailNotification::class, 1);
+    expect(delivery()->events_count)->toBe(2);
+});

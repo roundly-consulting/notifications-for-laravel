@@ -86,6 +86,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   key; a class matched nothing.
 - An acknowledgement that lands while an escalation level is being sent ends the chain: the next
   level is no longer armed (it fired after the acknowledgement).
+- A held trailing mail stays behind its window when the user changes quiet hours or timezone. It
+  was re-timed to "now" and went out before the window closed, without the window's final count.
 
 ## 1.1.0 - 2026-11-08
 
