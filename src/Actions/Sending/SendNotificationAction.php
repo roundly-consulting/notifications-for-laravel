@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications\Actions\Sending;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use RoundlyConsulting\Notifications\DataTransferObjects\RecipientOutcome;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
@@ -63,6 +64,10 @@ final readonly class SendNotificationAction
             // A keyed replay that already reached everyone arms nothing.
             $replay = $data->idempotencyKey !== null && Receipts::reachedAll($data->idempotencyKey, $recipients);
 
+            // Without a key of its own, the fan-out gets one: a job retried by the queue after it
+            // delivered part of its chunk does not deliver to those recipients again.
+            $key = $data->idempotencyKey ?? 'fanout:'.Str::ulid();
+
             foreach (array_chunk($recipients, NotificationsConfig::fanOutChunk()) as $chunk) {
                 Queues::dispatch(new DeliverToRecipientsJob(
                     type: $type->key(),
@@ -71,7 +76,7 @@ final readonly class SendNotificationAction
                     data: $payload,
                     actor: $data->actor === null ? null : ModelRefs::ref($data->actor),
                     context: $context,
-                    idempotencyKey: $data->idempotencyKey,
+                    idempotencyKey: $key,
                     escalationLevel: $data->escalationLevel,
                     reminderId: $data->reminderId,
                     reminder: $data->reminder,

@@ -388,3 +388,29 @@ it('checks a keyed fan-out to many recipients within the bind limits', function 
     expect($send()->queued)->toBe(1500)
         ->and($escalations())->toBe(0);
 });
+
+it('delivers once to each recipient when a fan-out job is retried', function (): void {
+    config()->set('notifications.fan_out.queue_above', 1);
+    $a = user();
+    $b = user();
+    $fail = true;
+    Notifications::define('flaky.fanout')->subject(Post::class)->access(function ($recipient) use (&$fail, $b): bool {
+        if ($fail && $recipient->is($b)) {
+            throw new RuntimeException('database hiccup');
+        }
+
+        return true;
+    })->title(fn (): string => 'Hello')->register();
+    Queue::fake();
+
+    Notifications::send('flaky.fanout', post(), [$a, $b]);
+    $job = Queue::pushed(DeliverToRecipientsJob::class)->sole();
+
+    expect(fn () => app()->call([$job, 'handle']))->toThrow(RuntimeException::class, 'database hiccup');
+    $fail = false;
+    app()->call([$job, 'handle']);              // the queue's retry
+
+    expect(InboxItem::query()->where('recipient_id', $a->id)->count())->toBe(1)
+        ->and(InboxItem::query()->where('recipient_id', $b->id)->count())->toBe(1)
+        ->and(NotificationDelivery::query()->where('recipient_id', $a->id)->count())->toBe(1);
+});

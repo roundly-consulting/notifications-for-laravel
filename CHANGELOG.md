@@ -88,6 +88,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   level is no longer armed (it fired after the acknowledgement).
 - A held trailing mail stays behind its window when the user changes quiet hours or timezone. It
   was re-timed to "now" and went out before the window closed, without the window's final count.
+- A fan-out job retried by the queue (`--tries` > 1) after it delivered part of its chunk no longer
+  delivers to those recipients again: a fan-out without `once()` gets an internal idempotency key
+  (one receipt per recipient). They got a second item (or an inflated count) and a second mail.
 
 ## 1.1.0 - 2026-11-08
 
