@@ -70,7 +70,8 @@ final class InboxItemResource extends JsonResource
             'body' => $body,
             'url' => $url,
             'count' => $item->count,
-            'data' => $type === null ? $data : $type->publicData($data),
+            // Fail closed: without the type, nothing says which data is public.
+            'data' => $type === null ? [] : $type->publicData($data),
             'actor' => $this->reference($item->actor, NotificationsConfig::actorResource(), $request),
             'subject' => $this->reference($item->subject, NotificationsConfig::subjectResource(), $request),
             'context' => $this->context($request),

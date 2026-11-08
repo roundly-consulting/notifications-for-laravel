@@ -174,7 +174,7 @@ it('renders the snapshot when the type is gone or its render throws (C-72)', fun
         'title' => 'Request PR-1 awaits your approval (1)',
         'body' => null,
         'url' => 'https://app.test/requests/'.$request->id,
-        'data' => ['reference' => 'PR-1'],
+        'data' => [],      // C-10: no type, no publicData() filter — nothing is exposed
     ]);
 });
 
@@ -301,3 +301,15 @@ final class ContextLabelOnly extends JsonResource
         return ['label' => $this->resource->label];
     }
 }
+
+it('exposes no data for an item whose type is no longer registered', function (): void {
+    $user = user();
+    Notifications::send('security.alert', null, $user, ['what' => 'login', 'ip' => '10.0.0.1']);
+    $item = InboxItem::query()->sole();
+    $item->forceFill(['type' => 'gone.type'])->save();
+
+    $rendered = (new InboxItemResource($item->fresh()))->resolve(Request::create('/'));
+
+    expect($rendered['data'])->toBe([])
+        ->and($rendered['title'])->toBe($item->title);
+});

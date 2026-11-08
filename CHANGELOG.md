@@ -87,6 +87,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A mail held for quiet hours at delivery time no longer uses up a delivery attempt, so it still
   gets every transport try of `notifications.mail.max_attempts`, with the backoff starting at the
   first step.
+- `InboxItemResource` renders `data` as `[]` for an item whose type is no longer registered. It
+  returned the raw stored data, so removing a type exposed what its `publicData()` hid.
 
 ## 1.0.0 - 2026-11-07
 
