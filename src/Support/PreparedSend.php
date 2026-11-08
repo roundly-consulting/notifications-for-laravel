@@ -35,6 +35,7 @@ final readonly class PreparedSend
         public ?ReminderReference $reminder,
         public CarbonImmutable $at,
         public ?string $title = null,
+        public bool $collapses = true,
     ) {}
 
     public function lane(): string

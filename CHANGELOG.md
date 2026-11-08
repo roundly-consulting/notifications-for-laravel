@@ -41,6 +41,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - After a host transaction that wrote a user's preferences rolled back, later writes for that user
   in the same long-running process (Octane, a queue worker) take the preference lock again. They
   ran unlocked, so two concurrent writes could lose one.
+- A mapped notification whose subject is unknown (the type has a subject class, the notification
+  no `subjectFrom()`) gets its own inbox item, as its mail is not de-duplicated either. Two such
+  notifications within the window were merged into one item and the first disappeared.
 
 ## 1.1.0 - 2026-11-08
 

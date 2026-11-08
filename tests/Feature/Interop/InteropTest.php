@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Notifications\Events\NotificationSending;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification as LaravelNotification;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -24,6 +26,7 @@ use RoundlyConsulting\Notifications\Listeners\ApplyNotificationRules;
 use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Support\Doctor;
 use RoundlyConsulting\Notifications\Support\InteropRules;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
@@ -311,7 +314,7 @@ it('still sends a second one-time code within a minute (C-66b)', function (): vo
 
 it('cannot fold a password reset by mapping an ancestor class', function (): void {
     Notifications::define('vendor.any')->window('PT15M')->title(fn (): string => 'Any')->register();
-    Notifications::interop()->map(Illuminate\Notifications\Notification::class, 'vendor.any');
+    Notifications::interop()->map(LaravelNotification::class, 'vendor.any');
     app(InteropRules::class)->validate(app(TypeRegistry::class), force: true);
     $user = user();
 
@@ -320,7 +323,7 @@ it('cannot fold a password reset by mapping an ancestor class', function (): voi
     $user->notify(new OneTimeCode('222222'));
 
     expect(mailedSubjects())->toBe(['Your code 111111', 'Your code 222222'])
-        ->and(Notifications::interop()->mapped())->toHaveKey(Illuminate\Notifications\Notification::class);
+        ->and(Notifications::interop()->mapped())->toHaveKey(LaravelNotification::class);
     expect(collect(Doctor::run())->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'time-critical'))->values()->all())
         ->toHaveCount(1);
 });
@@ -391,4 +394,40 @@ it('reads interop config strictly', function (string $key, mixed $value): void {
 
 beforeEach(function (): void {
     Notifications::define('urgent.windowed')->priority(Priority::Urgent)->window('PT5M')->title(fn (): string => 'x')->register();
+});
+
+it('does not collapse the inbox items of mapped notifications whose subject is unknown', function (): void {
+    Notifications::define('ticket.assigned')->subject(Post::class)->window('PT15M')->access(fn (): bool => true)
+        ->title(fn (NotificationPayload $p): string => (string) ($p->data['title'] ?? 'x'))->register();
+    $notice = new class('') extends LaravelNotification
+    {
+        public function __construct(public string $text) {}
+
+        /** @return list<string> */
+        public function via(object $notifiable): array
+        {
+            return ['mail', 'database'];
+        }
+
+        public function toMail(object $notifiable): MailMessage
+        {
+            return (new MailMessage)->subject('Notice: '.$this->text);
+        }
+
+        /** @return array<string, string> */
+        public function toArray(object $notifiable): array
+        {
+            return ['title' => 'Notice: '.$this->text];
+        }
+    };
+    Notifications::interop()->map($notice::class, 'ticket.assigned');
+    $user = user();
+
+    $user->notify(new $notice('ticket 1 assigned'));
+    at('2026-11-09 10:02:00');
+    $user->notify(new $notice('ticket 2 assigned'));
+
+    expect(mailedSubjects())->toBe(['Notice: ticket 1 assigned', 'Notice: ticket 2 assigned'])
+        ->and(InboxItem::query()->orderBy('id')->get()->map(fn (InboxItem $item): string => $item->title.' x'.$item->count)->all())
+        ->toBe(['Notice: ticket 1 assigned x1', 'Notice: ticket 2 assigned x1']);
 });

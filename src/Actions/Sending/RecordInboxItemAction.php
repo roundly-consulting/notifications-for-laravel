@@ -51,7 +51,7 @@ final readonly class RecordInboxItemAction
     private function step(PreparedSend $send, Model $recipient): InboxWrite
     {
         $class = NotificationModels::inboxItem();
-        $window = Windows::of($send->type);
+        $window = $send->collapses ? Windows::of($send->type) : null;
         $key = Keys::collapse($recipient, $send->type->key(), $send->subjectIdentity(), $send->context?->key, $send->lane());
         $now = $send->at;
 

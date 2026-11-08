@@ -105,11 +105,11 @@ final readonly class ApplyInteropRulesAction
         }
 
         return $channel === 'database'
-            ? $this->database($notifiable, $notification, $type, $subject)
+            ? $this->database($notifiable, $notification, $type, $subject, $checkable)
             : $this->mail($notifiable, $notification, $type, $subject, $checkable);
     }
 
-    private function database(Model $recipient, Notification $notification, NotificationType $type, ?Model $subject): ?bool
+    private function database(Model $recipient, Notification $notification, NotificationType $type, ?Model $subject, bool $checkable): ?bool
     {
         $mode = NotificationsConfig::interopDatabase();
 
@@ -137,6 +137,9 @@ final readonly class ApplyInteropRulesAction
             reminder: null,
             at: Clock::now(),
             title: $title,
+            // As for mail: notifications about an unknown subject are not the same event — never
+            // collapse them into one item.
+            collapses: $checkable,
         );
 
         $this->recordInboxItem->execute($send, $recipient);
