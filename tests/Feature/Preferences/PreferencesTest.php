@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Notifications\Actions\Preferences\SetCategoryPreferenceAction;
 use RoundlyConsulting\Notifications\Actions\Preferences\UpdatePreferencesAction;
 use RoundlyConsulting\Notifications\Contracts\HasNotificationTimezone;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
@@ -678,3 +679,14 @@ it('refuses switching off the locked inbox for a whole category', function (Clos
     'mute' => [fn (PreferencesHandle $p) => $p->muteCategory('comments', Channel::Inbox), 'categories.comments.inbox'],
     'update' => [fn (PreferencesHandle $p) => $p->update(new PreferencesUpdate(categories: ['comments' => ['inbox' => false]])), 'categories.comments.inbox'],
 ]);
+
+it('stores nothing for switching on the locked inbox of a category', function (): void {
+    Event::fake([NotificationPreferenceChanged::class]);
+    $user = user();
+
+    Notifications::preferences($user)->muteCategory('comments')->unmuteCategory('comments');
+    app(SetCategoryPreferenceAction::class)->execute($user, 'comments', [Channel::Inbox], true);
+
+    expect(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
+    Event::assertDispatchedTimes(NotificationPreferenceChanged::class, 2);
+});
