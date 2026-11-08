@@ -36,5 +36,6 @@ enum NotificationOperation: string
     case Sweep = 'sweep';
     case Prune = 'prune';
     case InboxMessage = 'inbox_message';
+    case SubjectDeleted = 'subject_deleted';
     case Interop = 'interop';
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Notifications\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Notifications\Actions\Inbox\ForgetSubjectInboxAction;
 use RoundlyConsulting\Notifications\Actions\Reminders\CancelRemindersAction;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
@@ -64,22 +65,13 @@ final class SubjectLifecycle
             return;
         }
 
-        $items = NotificationModels::inboxItem()::query()
-            ->where('subject_type', $subject->getMorphClass())
-            ->where('subject_id', $subject->getKey())
-            ->get();
-
-        foreach ($items as $item) {
-            $item->open_key = null;
-
-            if ($mode === 'archive') {
-                $item->archived_at ??= Clock::now();
-                $item->save();
-            } else {
-                $item->save();
-                $item->delete();
-            }
-        }
+        // Through the manager, so Notifications::fake() records it instead of writing.
+        $manager->perform(
+            NotificationOperation::SubjectDeleted,
+            ForgetSubjectInboxAction::class,
+            static fn (ForgetSubjectInboxAction $action): int => $action->execute($subject, $mode),
+            ['subject' => $subject, 'mode' => $mode],
+        );
     }
 
     /**

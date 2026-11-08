@@ -6,6 +6,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
+### Added
+
+- `Notifications::fake()` gains an assertion for every recorded operation: `assertMarkedUnread()`,
+  `assertUnarchived()`, `assertDeleted()`, `assertInboxMessage()`, `assertCategoryPreferenceSet()`,
+  `assertPreferencesReset()`, `assertDigestSet()`, `assertQuietHoursSet()`, `assertTimezoneSet()`,
+  `assertPruned()`, `assertSubjectForgotten()`, the negative `assertNothingMarkedRead()`,
+  `assertNothingArchived()`, `assertNoPreferenceChanged()` and `assertNoRemindersScheduled()`, and
+  the generic `assertRecorded(NotificationOperation $operation, ?Closure $where, ?int $times)` /
+  `assertNotRecorded()` for the rest (digests, deliveries, reminder fires, backfills).
+- `assertNotSent()` takes `to:` and `about:`, and `assertSent()` / `assertNotSent()` accept a type
+  class as well as its key.
+- `NotificationOperation::SubjectDeleted`, recorded for the inbox cleanup of
+  `notifications.inbox.on_subject_deleted`.
+
 ### Changed
 
 - Behaviour change: switching off a channel that cannot be switched off now throws
@@ -25,6 +39,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - Octane: `NotificationsManager` no longer keeps the container it was built with. It resolves
   every action from the current container, so a per-request binding (an action override, a
   sandboxed config) applies even when a provider used the facade during boot.
+- Under `Notifications::fake()`, deleting a subject no longer archives or deletes its inbox items
+  (`notifications.inbox.on_subject_deleted`). The cleanup now runs through the manager, so the fake
+  records it like every other write.
 
 ## 1.0.0 - 2026-11-07
 
