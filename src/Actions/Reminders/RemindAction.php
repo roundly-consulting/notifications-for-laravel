@@ -70,15 +70,24 @@ final readonly class RemindAction
         }
 
         $rows = [];
+        $now = Clock::now();
 
         foreach ($rule->signedOffsets() as $offset) {
             if ($offset === null) {
                 throw InvalidReminderRuleException::invalid($type, 'every offset must be a positive ISO-8601 duration');
             }
 
+            $due = ReminderRule::dueAt($anchor, $offset);
+
+            // Like schedule() and sync: a past offset is never back-filled (it would fire at once,
+            // together with the others).
+            if ($due->lessThanOrEqualTo($now)) {
+                continue;
+            }
+
             $key = 'adhoc:'.($rule->hasExplicitKey() ? $rule->ruleKey() : $rule->attribute.':'.$offset);
 
-            $rows[] = ReminderWriter::upsert($subject, $type, $key, $rule->attribute, $offset, $anchor, ReminderRule::dueAt($anchor, $offset), $stored, $payload, keyedByOffset: false);
+            $rows[] = ReminderWriter::upsert($subject, $type, $key, $rule->attribute, $offset, $anchor, $due, $stored, $payload, keyedByOffset: false);
         }
 
         return $rows;

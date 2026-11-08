@@ -89,6 +89,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   first step.
 - `InboxItemResource` renders `data` as `[]` for an item whose type is no longer registered. It
   returned the raw stored data, so removing a type exposed what its `publicData()` hid.
+- An ad-hoc relative reminder (`remind($type, Reminder::before(...))`) skips offsets that are
+  already past, like a type rule does. They were scheduled and then fired all at once on the next
+  sweep.
 
 ## 1.0.0 - 2026-11-07
 

@@ -775,3 +775,16 @@ it('normalises a class-string type when scheduling template rules', function ():
     expect($pending()->count())->toBe(3)
         ->and($pending()->pluck('type')->unique()->values()->all())->toBe(['contract.expiring']);
 });
+
+it('skips ad-hoc offsets already in the past', function (): void {
+    $contract = expiringContract('2026-11-09 13:00:00');
+    Notifications::for($contract)->reminders()->cancel();
+
+    $rows = Notifications::for($contract)->remind('contract.expiring', Reminder::before('expires_at', 'P1D', 'PT2H', 'PT1H'), to: $contract->owner);
+
+    expect(collect($rows)->map(fn (NotificationReminder $row): string => $row->offset.'@'.$row->due_at->format('H:i'))->all())->toBe(['-PT2H@11:00', '-PT1H@12:00'])
+        ->and(Notifications::for($contract)->remind('contract.expiring', Reminder::before('expires_at', 'P2D'), to: $contract->owner))->toBe([]);
+
+    at('2026-11-09 11:00:00');
+    expect(Notifications::sweep()->reminders)->toBe(1);
+});
