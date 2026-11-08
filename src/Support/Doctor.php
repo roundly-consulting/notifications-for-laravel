@@ -103,6 +103,8 @@ final class Doctor
 
             if (InteropRules::timeCritical($notification) && ! InteropRules::fitsTimeCritical($type)) {
                 $findings[] = new DoctorFinding('error', sprintf('Interop: %s is time-critical and may only map to an urgent type without a window ([%s] is not).', $name, $key));
+            } elseif (InteropRules::coversTimeCritical($notification) && ! InteropRules::fitsTimeCritical($type)) {
+                $findings[] = new DoctorFinding('warning', sprintf('Interop: %s also matches time-critical notifications (password resets, sign-in codes); [%s] could hold or fold them, so they pass through untouched.', $name, $key));
             }
 
             if ($type->digestible() && $type->priority() === Priority::Low) {

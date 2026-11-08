@@ -134,6 +134,25 @@ final class InteropRules
         return false;
     }
 
+    /**
+     * Whether a time-critical notification can match a mapping of this class (it is one, or an
+     * ancestor of one): matching follows subclasses.
+     */
+    public static function coversTimeCritical(string $mapped): bool
+    {
+        if (self::timeCritical($mapped)) {
+            return true;
+        }
+
+        foreach (self::TIME_CRITICAL as $class) {
+            if (class_exists($class) && is_a($class, ltrim($mapped, '\\'), true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function fitsTimeCritical(NotificationType $type): bool
     {
         return $type->priority() === Priority::Urgent && Windows::of($type) === null && ! $type->digestible();

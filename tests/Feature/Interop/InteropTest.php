@@ -24,6 +24,7 @@ use RoundlyConsulting\Notifications\Listeners\ApplyNotificationRules;
 use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
+use RoundlyConsulting\Notifications\Support\Doctor;
 use RoundlyConsulting\Notifications\Support\InteropRules;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Guest;
@@ -306,6 +307,22 @@ it('still sends a second one-time code within a minute (C-66b)', function (): vo
     $user->notify(new OneTimeCode('222222'));
 
     expect(mailedSubjects())->toBe(['Your code 111111', 'Your code 222222']);
+});
+
+it('cannot fold a password reset by mapping an ancestor class', function (): void {
+    Notifications::define('vendor.any')->window('PT15M')->title(fn (): string => 'Any')->register();
+    Notifications::interop()->map(Illuminate\Notifications\Notification::class, 'vendor.any');
+    app(InteropRules::class)->validate(app(TypeRegistry::class), force: true);
+    $user = user();
+
+    $user->notify(new OneTimeCode('111111'));
+    at('2026-11-09 10:02:00');
+    $user->notify(new OneTimeCode('222222'));
+
+    expect(mailedSubjects())->toBe(['Your code 111111', 'Your code 222222'])
+        ->and(Notifications::interop()->mapped())->toHaveKey(Illuminate\Notifications\Notification::class);
+    expect(collect(Doctor::run())->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'time-critical'))->values()->all())
+        ->toHaveCount(1);
 });
 
 it('lets the notification through untouched when the interop step throws (C-81)', function (): void {

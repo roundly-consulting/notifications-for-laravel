@@ -90,6 +90,13 @@ final readonly class ApplyInteropRulesAction
         $this->rules->validate($this->types);
         $type = $this->types->find($key);
 
+        // A mapping of an ancestor class matches a password reset or a sign-in code too: those
+        // pass untouched unless the type cannot hold, fold or digest them (validate() checks only
+        // the mapped class itself).
+        if (InteropRules::timeCritical($notification::class) && ! InteropRules::fitsTimeCritical($type)) {
+            return null;
+        }
+
         $subject = Subjects::fresh($type, $type->subjectFrom($notification));
         $checkable = $type->subject() === null || $subject !== null;
 

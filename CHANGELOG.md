@@ -24,6 +24,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A keyed (`once()`) fan-out to many recipients no longer throws before anything is queued. The
   replay check built one condition per recipient, which broke SQLite at about 1 000 recipients
   and MySQL/PostgreSQL at 32 768; it now checks in chunks of 1 000 per morph type.
+- Interop never holds, folds or digests a password reset or sign-in code that matches a mapping of
+  one of its ancestor classes (e.g. a vendor base class or `Notification` itself): it passes
+  through untouched unless the type is urgent with no window. A second reset mail within the
+  window was folded and never sent. `notifications:doctor` warns about such a mapping.
 
 ## 1.1.0 - 2026-11-08
 
