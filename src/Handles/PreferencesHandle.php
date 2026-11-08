@@ -234,6 +234,8 @@ final readonly class PreferencesHandle
      */
     private function setChannels(string $type, array $channels, ?bool $enabled): self
     {
+        $type = app(TypeRegistry::class)->keyOf($type);
+
         $this->manager->perform(
             NotificationOperation::SetPreference,
             SetChannelPreferenceAction::class,

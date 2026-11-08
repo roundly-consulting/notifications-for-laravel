@@ -83,6 +83,14 @@ final class TypeRegistry
         return null;
     }
 
+    /**
+     * The key of a type given by key or class; an unregistered value comes back as given.
+     */
+    public function keyOf(string $type): string
+    {
+        return $this->get($type)?->key() ?? $type;
+    }
+
     public function has(string $key): bool
     {
         return $this->get($key) !== null;

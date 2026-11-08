@@ -30,6 +30,7 @@ final readonly class ScheduleRemindersAction
     public function execute(Model $subject, string $type, RecipientSpec $to): array
     {
         $definition = $this->types->find($type);
+        $type = $definition->key();     // a class-string is stored as its key
         $expected = $definition->subject();
 
         if ($expected === null || ! $subject instanceof $expected) {

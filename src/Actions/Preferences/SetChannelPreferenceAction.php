@@ -33,6 +33,7 @@ final readonly class SetChannelPreferenceAction
     public function execute(Model $user, string $type, array $channels, ?bool $enabled): void
     {
         $definition = $this->types->find($type);
+        $type = $definition->key();     // a class-string is stored as its key
 
         if ($enabled === false && $definition->mandatory()) {
             throw MandatoryNotificationException::forType($type);

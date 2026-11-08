@@ -26,10 +26,14 @@ use RoundlyConsulting\Notifications\Reminders\ReminderRule;
 final class ReminderRows
 {
     /**
+     * A subject's rows, of one type (by key or class) or all.
+     *
      * @return Builder<NotificationReminder>
      */
     public static function forSubject(Model $subject, ?string $type = null): Builder
     {
+        $type = $type === null ? null : app(TypeRegistry::class)->keyOf($type);
+
         return NotificationModels::reminder()::query()
             ->where('subject_type', $subject->getMorphClass())
             ->where('subject_id', $subject->getKey())

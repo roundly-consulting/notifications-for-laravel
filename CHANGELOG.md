@@ -74,6 +74,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A reminder or escalation delivered through a queued fan-out (more recipients than
   `notifications.fan_out.queue_above`) keeps its `ReminderReference`: `$payload->reminder` and
   the mail's reminder metadata were missing.
+- A type passed as its class (`RequestAwaitingApproval::class`) is stored as its key. `mute()`,
+  `set()` and `unmute()` stored the class name, which no read matched (the mute did nothing), and
+  `schedule()` / `remind()` wrote reminder rows under the class name, beside the keyed ones and out
+  of reach of `cancel('…')` and `acknowledge('…')`. Reminder filters (`pending()`, `all()`,
+  `cancel()`, `sync()`, `acknowledge()`) accept a class too. A `PreferencesUpdate` (and
+  `PATCH /preferences`) refuses a type that is not a key.
 
 ## 1.0.0 - 2026-11-07
 

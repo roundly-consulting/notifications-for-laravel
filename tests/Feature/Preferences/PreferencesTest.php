@@ -37,6 +37,7 @@ use RoundlyConsulting\Notifications\Options\DigestPreference;
 use RoundlyConsulting\Notifications\Options\TimezonePreference;
 use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\RequestAwaitingApproval;
 use RoundlyConsulting\Options\Facades\Options;
 use RoundlyConsulting\Options\Option;
 
@@ -606,4 +607,25 @@ it('reads a channel the type lacks as off and a stored value that is no map as e
     expect(Notifications::preferences($user)->enabled('inbox.only', Channel::Mail))->toBeFalse()
         ->and(Notifications::preferences($user)->enabled('inbox.only', Channel::Inbox))->toBeTrue()
         ->and(Preferences::normaliseMap('junk'))->toBe(['types' => [], 'categories' => []]);
+});
+
+it('normalises a class-string type to its key', function (Closure $write, array $stored): void {
+    $user = user();
+
+    $write(Notifications::preferences($user));
+
+    expect(Preferences::channelMap($user)['types'])->toBe($stored)
+        ->and(Notifications::preferences($user)->enabled('request.awaiting_approval', Channel::Mail))->toBe(($stored['request.awaiting_approval']['mail'] ?? true));
+})->with([
+    'mute' => [fn (PreferencesHandle $p) => $p->mute(RequestAwaitingApproval::class), ['request.awaiting_approval' => ['mail' => false]]],
+    'set' => [fn (PreferencesHandle $p) => $p->set(RequestAwaitingApproval::class, Channel::Mail, false), ['request.awaiting_approval' => ['mail' => false]]],
+    'unmute' => [fn (PreferencesHandle $p) => $p->mute('request.awaiting_approval')->unmute(RequestAwaitingApproval::class), []],
+]);
+
+it('refuses a type key that is not a key in a PreferencesUpdate', function (): void {
+    $user = user();
+
+    expect(fn () => Notifications::preferences($user)->update(new PreferencesUpdate(channels: [RequestAwaitingApproval::class => ['mail' => false]])))
+        ->toThrow(UnknownNotificationTypeException::class, 'The notification type "RequestAwaitingApproval" is not registered.')
+        ->and(Preferences::channelMap($user))->toBe(['types' => [], 'categories' => []]);
 });

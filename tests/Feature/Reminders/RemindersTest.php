@@ -32,6 +32,7 @@ use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\ContractExpiring;
 use RoundlyConsulting\Notifications\Traits\HasNotificationReminders;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 use RoundlyConsulting\Testing\Fixtures\LockRecorder;
@@ -746,3 +747,31 @@ it('skips acknowledge-on-read for a gone reminder or type', function (Closure $b
     'type gone' => [fn (InboxItem $item) => NotificationReminder::query()->whereKey($item->reminder_id)->update(['type' => 'gone.type'])],
     'rule gone' => [fn (InboxItem $item) => NotificationReminder::query()->whereKey($item->reminder_id)->update(['rule' => 'gone:rule'])],
 ]);
+
+it('normalises a class-string type to its key in schedule, remind, cancel and acknowledge', function (): void {
+    $type = ContractExpiring::class;
+    $contract = expiringContract();
+    $before = NotificationReminder::query()->count();
+
+    Notifications::for($contract)->reminders()->sync($type);
+    Notifications::for($contract)->remind($type, Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: $contract->owner);
+    Notifications::for($contract)->remind('contract.expiring', Reminder::at(CarbonImmutable::now('UTC')->addDay()), to: $contract->owner);
+
+    expect(NotificationReminder::query()->count())->toBe($before + 1)
+        ->and(NotificationReminder::query()->pluck('type')->unique()->values()->all())->toBe(['contract.expiring'])
+        ->and(Notifications::for($contract)->reminders()->pending($type))->toHaveCount($before + 1);
+
+    expect(Notifications::for($contract)->reminders()->cancel($type))->toBe($before + 1);
+});
+
+it('normalises a class-string type when scheduling template rules', function (): void {
+    $contract = expiringContract();
+    Notifications::for($contract)->reminders()->cancel();
+    $pending = fn () => NotificationReminder::query()->where('status', ReminderStatus::Pending->value);
+
+    Notifications::for($contract)->reminders()->schedule(ContractExpiring::class, to: $contract->owner);
+    Notifications::for($contract)->reminders()->schedule('contract.expiring', to: $contract->owner);
+
+    expect($pending()->count())->toBe(3)
+        ->and($pending()->pluck('type')->unique()->values()->all())->toBe(['contract.expiring']);
+});

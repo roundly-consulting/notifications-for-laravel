@@ -31,10 +31,11 @@ final class PreferenceUpdates
         $problems = [];
 
         foreach ($update->channels as $key => $channels) {
-            $type = $types->get($key);
+            // Keys only: a class-string would be stored as a class name the reads never match.
+            $type = preg_match(TypeRegistry::KEY_PATTERN, $key) === 1 ? $types->get($key) : null;
 
             if ($type === null) {
-                $problems["channels.{$key}"] = UnknownNotificationTypeException::forKey($key);
+                $problems["channels.{$key}"] = UnknownNotificationTypeException::forKey(str_contains($key, '\\') ? class_basename($key) : $key);
 
                 continue;
             }
