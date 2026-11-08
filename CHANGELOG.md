@@ -71,6 +71,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   not told twice, or after the acknowledgement.
 - A send that throws while delivering no longer leaves an escalation armed: the chain is armed
   only after delivery went through.
+- A reminder or escalation delivered through a queued fan-out (more recipients than
+  `notifications.fan_out.queue_above`) keeps its `ReminderReference`: `$payload->reminder` and
+  the mail's reminder metadata were missing.
 
 ## 1.0.0 - 2026-11-07
 

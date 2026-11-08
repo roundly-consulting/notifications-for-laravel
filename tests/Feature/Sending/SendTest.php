@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -28,6 +29,7 @@ use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\NotificationPayload;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
+use RoundlyConsulting\Notifications\Reminders\Reminder;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Contract;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
@@ -310,4 +312,22 @@ it('builds the payload a type renders from', function (): void {
         ->and($seen->data)->toBe(['a' => 1])
         ->and($seen->count)->toBe(1)
         ->and($seen->escalated)->toBeFalse();
+});
+
+it('keeps the reminder reference through a queued fan-out', function (): void {
+    config()->set('notifications.fan_out.queue_above', 1);
+    $contract = contract();
+    $recipients = [user(), user()];
+    $contract->company->addMember($recipients[0], 'manager')->addMember($recipients[1], 'manager');
+    [$reminder] = Notifications::for($contract)->remind('contract.expiring', Reminder::at(CarbonImmutable::now('UTC')->addHour()), to: $recipients);
+
+    at(CarbonImmutable::now('UTC')->addHours(2)->toDateTimeString());
+    Notifications::sweep();
+
+    $deliveries = NotificationDelivery::query()->get();
+    $items = InboxItem::query()->get();
+
+    expect($deliveries)->toHaveCount(2)
+        ->and($deliveries->every(fn (NotificationDelivery $delivery): bool => ($delivery->data['_notifications']['reminder']['id'] ?? null) === $reminder->id))->toBeTrue()
+        ->and($items->every(fn (InboxItem $item): bool => $item->reminder_id === $reminder->id))->toBeTrue();
 });

@@ -100,6 +100,7 @@ final readonly class SendNotificationAction
                     idempotencyKey: $data->idempotencyKey,
                     escalationLevel: $data->escalationLevel,
                     reminderId: $data->reminderId,
+                    reminder: $data->reminder,
                 ));
             }
 

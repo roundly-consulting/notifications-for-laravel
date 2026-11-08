@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use RoundlyConsulting\Notifications\Actions\Sending\DeliverToRecipientAction;
 use RoundlyConsulting\Notifications\DataTransferObjects\ContextReference;
+use RoundlyConsulting\Notifications\DataTransferObjects\ReminderReference;
 use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\PreparedSend;
@@ -41,6 +42,7 @@ final class DeliverToRecipientsJob implements ShouldQueue
         public readonly ?string $idempotencyKey,
         public readonly int $escalationLevel,
         public readonly int|string|null $reminderId,
+        public readonly ?ReminderReference $reminder = null,
     ) {}
 
     public function handle(TypeRegistry $types, DeliverToRecipientAction $deliver): void
@@ -63,7 +65,7 @@ final class DeliverToRecipientsJob implements ShouldQueue
             idempotencyKey: $this->idempotencyKey,
             escalationLevel: $this->escalationLevel,
             reminderId: $this->reminderId,
-            reminder: null,
+            reminder: $this->reminder,
             at: Clock::now(),
         );
 
