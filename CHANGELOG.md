@@ -62,6 +62,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - An inbox id beyond the bigint range (`9999999999999999999`), `0` or one with a leading zero is
   "not found" before it reaches SQL: the API answered 500 on PostgreSQL (out of range) instead of
   404.
+- Under `Notifications::fake()`, `send(Foo::class, …)` returns a `SendResult` whose `type` is the
+  key, like the real send (it was the class name).
 
 ## 1.1.0 - 2026-11-08
 

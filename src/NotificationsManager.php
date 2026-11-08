@@ -87,7 +87,7 @@ class NotificationsManager
             SendNotificationAction::class,
             static fn (SendNotificationAction $action): SendResult => $action->execute($data),
             ['data' => $data],
-        ) ?? new SendResult($data->type);
+        ) ?? new SendResult($this->container()->make(TypeRegistry::class)->keyOf($data->type));
     }
 
     /**

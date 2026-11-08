@@ -258,3 +258,11 @@ it('throws under the fake what the real send throws at the call site', function 
     'non-JSON data' => [fn () => Notifications::send('security.alert', null, user(), ['at' => new DateTimeImmutable]), InvalidNotificationDataException::class],
     'escalation without a subject' => [fn () => Notifications::type('security.alert')->to(user())->escalate('P1D', user())->send(), InvalidNotificationSubjectException::class],
 ]);
+
+it('returns the same SendResult type key under the fake as the real send', function (): void {
+    $real = Notifications::send(SecurityAlert::class, null, user())->type;
+
+    Notifications::fake();
+
+    expect(Notifications::send(SecurityAlert::class, null, user())->type)->toBe($real)->toBe('security.alert');
+});
