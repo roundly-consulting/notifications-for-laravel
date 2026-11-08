@@ -30,6 +30,7 @@ return [
     'notification_channel_locked' => 'Kanál „:channel“ upozornenia „:type“ nemožno vypnúť.',
     'notification_category_channel_locked' => 'Kanál „:channel“ kategórie „:category“ nemožno vypnúť.',
     'notification_nothing_to_mute' => 'Upozornenie „:type“ nemá žiadny kanál, ktorý možno vypnúť.',
+    'preferences_locked' => 'Vaše nastavenia upozornení sa práve menia inde. Skúste to znova o chvíľu.',
     'inbox_item_not_found' => 'Upozornenie sa nenašlo.',
     'invalid_quiet_hours' => 'Tiché hodiny sa musia začínať a končiť v inom čase.',
     'invalid_time' => '„:value“ nie je čas, napríklad 22:00.',

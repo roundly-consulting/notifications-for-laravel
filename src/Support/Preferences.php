@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Notifications\Support;
 use Closure;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use RoundlyConsulting\Notifications\DataTransferObjects\DigestPreferenceData;
@@ -14,6 +15,7 @@ use RoundlyConsulting\Notifications\DataTransferObjects\QuietHours;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Exceptions\InvalidNotificationsConfigurationException;
+use RoundlyConsulting\Notifications\Exceptions\PreferencesLockedException;
 use RoundlyConsulting\Notifications\NotificationType;
 use RoundlyConsulting\Notifications\Options\ChannelPreferences;
 use RoundlyConsulting\Notifications\Options\DigestPreference;
@@ -216,7 +218,12 @@ final class Preferences
         }
 
         $lock = $store->lock($name, NotificationsConfig::lockSeconds());
-        $lock->block(min(NotificationsConfig::lockSeconds(), 5));
+        try {
+            $lock->block(min(NotificationsConfig::lockSeconds(), 5));
+        } catch (LockTimeoutException) {
+            throw PreferencesLockedException::busy();
+        }
+
         self::$held[$name] = $lock;
 
         $release = static function () use ($lock, $name): void {

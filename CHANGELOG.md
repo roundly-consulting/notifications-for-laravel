@@ -91,6 +91,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A fan-out job retried by the queue (`--tries` > 1) after it delivered part of its chunk no longer
   delivers to those recipients again: a fan-out without `once()` gets an internal idempotency key
   (one receipt per recipient). They got a second item (or an inflated count) and a second mail.
+- A preference write that cannot get the user's preference lock in time throws
+  `PreferencesLockedException` (423, `preferences_locked`, a translated "try again" message)
+  instead of Laravel's `LockTimeoutException`; `PATCH /preferences` answered 500.
 
 ## 1.1.0 - 2026-11-08
 

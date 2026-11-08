@@ -3,16 +3,21 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
+use RoundlyConsulting\Notifications\Exceptions\PreferencesLockedException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\UserRecipients;
+use RoundlyConsulting\Notifications\Support\Keys;
+use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\Preferences;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 
@@ -376,3 +381,23 @@ it('answers 404 for an integer id out of range, before it reaches SQL', function
     expect($queries)->toBe(0);
     $this->actingAs($user)->postJson("/notifications/inbox/{$id}/read")->assertNotFound()->assertJsonPath('code', 'inbox_item_not_found');
 })->with(['above bigint' => ['9999999999999999999'], 'zero' => ['0'], 'leading zeros' => ['007']]);
+
+it('answers 423 when the preferences are locked by another write', function (): void {
+    config()->set('notifications.preferences.lock_seconds', 1);
+    CarbonImmutable::setTestNow();      // the lock's wait is timed on the real clock
+    Carbon::setTestNow();
+    $user = user();
+    $lock = Cache::store()->getStore()->lock('notifications:prefs:'.Keys::digest(ModelRefs::identity($user)), 10, 'other');
+    $lock->get();
+
+    $this->actingAs($user)->patchJson('/notifications/preferences', ['channels' => ['comment.posted' => ['mail' => false]]])
+        ->assertStatus(423)
+        ->assertJsonPath('code', 'preferences_locked')
+        ->assertJsonPath('message', 'Your notification settings are being changed elsewhere. Try again in a moment.');
+
+    app()->setLocale('sk');
+    expect(fn () => Notifications::preferences($user)->mute('comment.posted'))
+        ->toThrow(PreferencesLockedException::class, 'Vaše nastavenia upozornení sa práve menia inde. Skúste to znova o chvíľu.');
+
+    $lock->release();
+});
