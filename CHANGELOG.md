@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
+## 1.1.0 - 2026-11-08
+
 ### Added
 
 - `DELETE /inbox/{item}` (route `notifications.inbox.destroy`) deletes one of the user's items:
@@ -41,16 +43,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   they shared a `once()` key), so a director could get ten escalations for one request. A pending
   chain now absorbs later sends and keeps its own recipients and due times; a send after the chain
   ended (last level fired, acknowledged or cancelled) arms a new one.
-- `PreferencesHandle::muted($type)` is `false` for a type that sends no mail (it was `true`).
-- `NotificationPreferenceChanged` fires only when a write changed the stored override; a repeated
-  mute, an unmute of an untouched type or a reset of untouched preferences fires nothing.
+- Behaviour change: under `Notifications::fake()`, a send the real pipeline refuses up front
+  throws the same exception instead of being recorded: an unknown type, a subject of the wrong
+  class, data that is not plain JSON, an escalation without a subject (also bad keys, contexts and
+  unstorable escalation recipients). A green test no longer hides a production exception; a test
+  that relied on the fake accepting such a send now fails with the real exception.
+- Behaviour change: `InboxItemResource` renders `data` as `[]` for an item whose type is no longer
+  registered. It returned the raw stored data, so removing a type exposed what its `publicData()`
+  hid.
+- Behaviour change: `NotificationsManager` and `NotificationsFake` take no constructor arguments
+  any more (they resolve the current container). Code that built either with `new` and a
+  container must drop the argument, or get them from the container or `Notifications::fake()`.
+- Behaviour change: `PreferencesHandle::muted($type)` is `false` for a type that sends no mail (it
+  was `true`).
+- Behaviour change: `NotificationPreferenceChanged` fires only when a write changed the stored
+  override; a repeated mute, an unmute of an untouched type or a reset of untouched preferences
+  fires nothing.
 - Performance: with `notifications.inbox.recheck_on_read` on, reading the inbox reuses the
   subjects the query already loaded instead of reading each one again (10 items: 2 queries instead
   of 12).
 - Performance: `InboxHandle::counts()` reads every context's label in one query instead of one
   query per context.
-- `NotificationsManager` and `NotificationsFake` take no constructor arguments any more (they
-  resolve the current container); get them from the container or `Notifications::fake()`.
 - Maintenance: `illuminate/container` is now a direct requirement (`^13.0`).
 - Maintenance: delivery, digest and reminder claims use Eloquent's `incrementEach()` again (the
   Laravel 12 workaround is gone); `updated_at` is still stamped on every claim.
@@ -87,8 +100,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - A mail held for quiet hours at delivery time no longer uses up a delivery attempt, so it still
   gets every transport try of `notifications.mail.max_attempts`, with the backoff starting at the
   first step.
-- `InboxItemResource` renders `data` as `[]` for an item whose type is no longer registered. It
-  returned the raw stored data, so removing a type exposed what its `publicData()` hid.
 - An ad-hoc relative reminder (`remind($type, Reminder::before(...))`) skips offsets that are
   already past, like a type rule does. They were scheduled and then fired all at once on the next
   sweep.
@@ -102,10 +113,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   `SoftDeletes`, so a request-bound scope (tenancy) cancelled their queued mail as `subject_gone`
   while a soft-deleting subject went through. Soft-deleted subjects are still refused unless the
   type allows them, and access is still the type's check.
-- Under `Notifications::fake()`, a send the real pipeline refuses up front throws the same
-  exception instead of being recorded: an unknown type, a subject of the wrong class, data that is
-  not plain JSON, an escalation without a subject (also bad keys, contexts and unstorable
-  escalation recipients). A green test no longer hides a production exception.
 
 ## 1.0.0 - 2026-11-07
 
