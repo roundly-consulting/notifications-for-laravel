@@ -59,6 +59,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 - The sweep no longer queues another mail job for a delivery whose job is still waiting in the
   queue. Under a backlog every sweep added up to 1 000 duplicate (no-op) jobs; a due delivery is
   now dispatched again only after `notifications.mail.lease`, in case its job was lost.
+- An inbox id beyond the bigint range (`9999999999999999999`), `0` or one with a leading zero is
+  "not found" before it reaches SQL: the API answered 500 on PostgreSQL (out of range) instead of
+  404.
 
 ## 1.1.0 - 2026-11-08
 

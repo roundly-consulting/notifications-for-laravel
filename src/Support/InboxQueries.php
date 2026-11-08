@@ -45,12 +45,13 @@ final class InboxQueries
 
     /**
      * A string id of the configured key type — anything else is "not found" before it reaches
-     * SQL (PostgreSQL answers a malformed uuid with an error, not an empty result).
+     * SQL (PostgreSQL answers a malformed uuid, or an integer beyond bigint, with an error, not an
+     * empty result).
      */
     private static function looksLikeAKey(string $id): bool
     {
         return match (NotificationsConfig::primaryKeyType()) {
-            KeyType::BigInt => preg_match('/^\d{1,19}$/', $id) === 1,
+            KeyType::BigInt => KeyTypes::isBigInt($id),
             KeyType::Uuid => Str::isUuid($id),
             KeyType::Ulid => Str::isUlid($id),
         };

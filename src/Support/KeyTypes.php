@@ -35,7 +35,7 @@ final class KeyTypes
         $key = $model->getKey();
 
         $fits = match ($type) {
-            KeyType::BigInt => is_int($key) || (is_string($key) && preg_match('/^\d{1,19}$/', $key) === 1),
+            KeyType::BigInt => is_int($key) || (is_string($key) && self::isBigInt($key)),
             KeyType::Uuid => is_string($key) && Str::isUuid($key),
             KeyType::Ulid => is_string($key) && Str::isUlid($key),
         };
@@ -43,5 +43,15 @@ final class KeyTypes
         if (! $fits) {
             throw InvalidNotificationsConfigurationException::keyTypeMismatch(NotificationsConfig::keyTypeKeyFor($role), class_basename($model), $type->value);
         }
+    }
+
+    /**
+     * A positive integer written plainly (no sign, no leading zero) that fits a bigint — anything
+     * else, `9999999999999999999` included, is no id (PostgreSQL would raise out of range).
+     */
+    public static function isBigInt(string $value): bool
+    {
+        return preg_match('/^[1-9]\d{0,18}$/', $value) === 1
+            && filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) !== false;
     }
 }

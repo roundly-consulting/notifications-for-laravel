@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
+use RoundlyConsulting\Notifications\Exceptions\InboxItemNotFoundException;
 use RoundlyConsulting\Notifications\Facades\Notifications;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
@@ -360,3 +362,17 @@ it('names its routes', function (): void {
         ->and(route('notifications.types.index'))->toEndWith('/notifications/types')
         ->and(Recipients::users())->toBeInstanceOf(UserRecipients::class);
 });
+
+it('answers 404 for an integer id out of range, before it reaches SQL', function (string $id): void {
+    $user = user();
+    Notifications::send('security.alert', null, $user);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    expect(fn () => Notifications::inbox($user)->find($id))->toThrow(InboxItemNotFoundException::class);
+    $queries = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], 'notification_inbox_items'))->count();
+    DB::disableQueryLog();
+
+    expect($queries)->toBe(0);
+    $this->actingAs($user)->postJson("/notifications/inbox/{$id}/read")->assertNotFound()->assertJsonPath('code', 'inbox_item_not_found');
+})->with(['above bigint' => ['9999999999999999999'], 'zero' => ['0'], 'leading zeros' => ['007']]);
