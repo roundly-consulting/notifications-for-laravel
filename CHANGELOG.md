@@ -8,6 +8,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ### Added
 
+- `DELETE /inbox/{item}` (route `notifications.inbox.destroy`) deletes one of the user's items:
+  204, or 404 for another user's item or a malformed id. A published routes file needs the line
+  added by hand.
 - `Notifications::fake()` gains an assertion for every recorded operation: `assertMarkedUnread()`,
   `assertUnarchived()`, `assertDeleted()`, `assertInboxMessage()`, `assertCategoryPreferenceSet()`,
   `assertPreferencesReset()`, `assertDigestSet()`, `assertQuietHoursSet()`, `assertTimezoneSet()`,

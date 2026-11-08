@@ -115,6 +115,18 @@ final class InboxController extends Controller
     }
 
     /**
+     * Deletes (soft) one of the user's items: 204, or 404 for another user's or a malformed id.
+     */
+    public function destroy(Request $request, string $item): JsonResource|JsonResponse
+    {
+        return $this->guarded(function () use ($request, $item): JsonResponse {
+            $this->notifications->inbox($this->user($request))->delete($item);
+
+            return new JsonResponse(null, 204);
+        });
+    }
+
+    /**
      * Acknowledges the reminder or escalation the item came from (stops its escalation). A user
      * who can no longer see the subject gets the same 404 as for a foreign item: an old item is no
      * key to silence an escalation others rely on.

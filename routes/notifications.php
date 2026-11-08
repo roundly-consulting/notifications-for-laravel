@@ -30,6 +30,7 @@ Route::prefix(NotificationsConfig::routesPrefix())
         Route::delete('inbox/{item}/read', [InboxController::class, 'unread'])->name('inbox.unread');
         Route::post('inbox/{item}/archive', [InboxController::class, 'archive'])->name('inbox.archive');
         Route::delete('inbox/{item}/archive', [InboxController::class, 'unarchive'])->name('inbox.unarchive');
+        Route::delete('inbox/{item}', [InboxController::class, 'destroy'])->name('inbox.destroy');
         Route::post('inbox/{item}/acknowledge', [InboxController::class, 'acknowledge'])->name('inbox.acknowledge');
         Route::get('preferences', [PreferencesController::class, 'show'])->name('preferences.show');
         Route::patch('preferences', [PreferencesController::class, 'update'])->name('preferences.update');

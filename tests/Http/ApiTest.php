@@ -90,6 +90,24 @@ it('marks read, unread, all read, archives and unarchives — only the user\'s o
     expect($theirs->fresh()->read_at)->toBeNull();
 });
 
+it('deletes only the user\'s own item over the API', function (): void {
+    $user = user();
+    Notifications::send('security.alert', null, [$user, $other = user()]);
+    $mine = InboxItem::query()->where('recipient_id', $user->id)->sole();
+    $theirs = InboxItem::query()->where('recipient_id', $other->id)->sole();
+
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$theirs->id}")
+        ->assertNotFound()
+        ->assertJsonPath('code', 'inbox_item_not_found');
+    $this->actingAs($user)->deleteJson('/notifications/inbox/abc')->assertNotFound();
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$mine->id}")->assertNoContent();
+    $this->actingAs($user)->deleteJson("/notifications/inbox/{$mine->id}")->assertNotFound();
+
+    expect(InboxItem::query()->whereKey($mine->id)->exists())->toBeFalse()
+        ->and(InboxItem::query()->whereKey($theirs->id)->exists())->toBeTrue()
+        ->and(route('notifications.inbox.destroy', $mine->id))->toEndWith("/notifications/inbox/{$mine->id}");
+});
+
 it('marks all read of one type through POST /inbox/read-all', function (): void {
     $user = user();
     $request = purchaseRequest();
