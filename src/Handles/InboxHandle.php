@@ -120,9 +120,12 @@ final readonly class InboxHandle
         return $this->with(category: $category);
     }
 
+    /**
+     * One type, by key or class.
+     */
     public function type(string $type): self
     {
-        return $this->with(type: $type);
+        return $this->with(type: app(TypeRegistry::class)->keyOf($type));
     }
 
     /**

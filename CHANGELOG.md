@@ -68,6 +68,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   (`assertMuted()`, `assertPreferenceSet()`, `assertReminderScheduled()`, `assertAcknowledged()`,
   …) accepts a key or a class, like the real operations, which store the key. `remind(Foo::class)`
   then `assertReminderScheduled($subject, 'foo.key')` failed.
+- `InboxHandle::type()` (and so `markAllRead()` through it) accepts a type class as well as its
+  key; a class matched nothing.
 
 ## 1.1.0 - 2026-11-08
 

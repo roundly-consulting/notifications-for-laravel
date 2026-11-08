@@ -27,6 +27,7 @@ use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Company;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\Post;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\PurchaseRequest;
 use RoundlyConsulting\Notifications\Tests\Fixtures\App\Models\User;
+use RoundlyConsulting\Notifications\Tests\Fixtures\App\Types\SecurityAlert;
 use RoundlyConsulting\Notifications\Traits\HasNotificationReminders;
 use RoundlyConsulting\Notifications\Traits\IsNotificationSubject;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
@@ -503,4 +504,15 @@ it('lets an explicit markAllRead(in:) argument override the handle context', fun
         ->and(Notifications::inbox($approver)->in($b->company)->unreadCount())->toBe(0)
         ->and(Notifications::inbox($approver)->category('requests')->markAllRead(category: 'security'))->toBe(1)
         ->and(Notifications::inbox($approver)->unreadCount())->toBe(1);
+});
+
+it('filters the inbox by a type class as by its key', function (): void {
+    $user = user();
+    Notifications::send('security.alert', null, $user);
+    Notifications::send('comment.posted', post(), $user, ['title' => 'x']);
+
+    expect(Notifications::inbox($user)->type(SecurityAlert::class)->get())->toHaveCount(1)
+        ->and(Notifications::inbox($user)->type(SecurityAlert::class)->unreadCount())->toBe(1)
+        ->and(Notifications::inbox($user)->type(SecurityAlert::class)->markAllRead())->toBe(1)
+        ->and(Notifications::inbox($user)->unreadCount())->toBe(1);
 });
