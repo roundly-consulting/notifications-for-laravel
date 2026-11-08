@@ -13,6 +13,7 @@ use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\ReminderKind;
 use RoundlyConsulting\Notifications\Enums\ReminderStatus;
 use RoundlyConsulting\Notifications\Events\EscalationFired;
+use RoundlyConsulting\Notifications\Events\InboxItemCreated;
 use RoundlyConsulting\Notifications\Events\ReminderCancelled;
 use RoundlyConsulting\Notifications\Events\ReminderFired;
 use RoundlyConsulting\Notifications\Events\ReminderRescheduled;
@@ -906,4 +907,31 @@ it('does not leave an orphan when schedule() runs during a fire of the same offs
     Notifications::for($contract)->reminders()->schedule('task.due', to: $contract->owner);
 
     expect($pending()->count())->toBe(1);
+});
+
+it('arms no next level when the subject is acknowledged while a level fires', function (): void {
+    $approver = user();
+    $director = user();
+    $board = user();
+    $request = purchaseRequest();
+    $request->company->addMember($approver, 'approver')->addMember($director, 'director')->addMember($board, 'board');
+    Notifications::type('request.awaiting_approval')->about($request)->to($approver)->with(['reference' => 'PR-1'])
+        ->escalate(after: 'P1D', to: $director)
+        ->escalate(after: 'P1D', to: $board)
+        ->send();
+
+    // The director's client reacts to the pushed item while the level is still firing.
+    Event::listen(InboxItemCreated::class, function (InboxItemCreated $event) use ($director, $request): void {
+        if ($event->item->recipient_id === $director->id) {
+            Notifications::for($request)->acknowledge(by: $director);
+        }
+    });
+
+    at('2026-11-10 10:00:00');
+    Notifications::sweep();
+    at('2026-11-11 10:00:00');
+    Notifications::sweep();
+
+    Notification::assertNotSentTo($board, TypedMailNotification::class);
+    expect(NotificationReminder::query()->where('kind', ReminderKind::Escalation->value)->where('status', ReminderStatus::Pending->value)->count())->toBe(0);
 });

@@ -79,6 +79,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
   then `assertReminderScheduled($subject, 'foo.key')` failed.
 - `InboxHandle::type()` (and so `markAllRead()` through it) accepts a type class as well as its
   key; a class matched nothing.
+- An acknowledgement that lands while an escalation level is being sent ends the chain: the next
+  level is no longer armed (it fired after the acknowledgement).
 
 ## 1.1.0 - 2026-11-08
 

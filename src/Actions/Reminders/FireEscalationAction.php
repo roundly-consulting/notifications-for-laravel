@@ -156,9 +156,13 @@ final readonly class FireEscalationAction
         // One transaction: a send-level chain's next level takes over the chain key the fired
         // level releases, so a concurrent send cannot open a second chain in between.
         $row->getConnection()->transaction(function () use ($row, $root, $next, $now, $subject): void {
+            // An acknowledgement that landed while this level was sending stamped the row: it is
+            // sent, but the chain ends here.
+            $acknowledged = NotificationModels::reminder()::query()->whereKey($row->getKey())->lockForUpdate()->whereNotNull('acknowledged_at')->exists();
+
             $row->forceFill(['status' => ReminderStatus::Sent, 'fired_at' => $now, 'active_key' => null, 'claimed_at' => null])->save();
 
-            if ($next !== null) {
+            if ($next !== null && ! $acknowledged) {
                 $root === null
                     ? $this->armNextSendLevel($row, $next, $now)
                     : Escalations::armLevel($root, $next, $row->level + 1, $subject, $now);
