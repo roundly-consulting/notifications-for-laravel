@@ -13,7 +13,9 @@ use RoundlyConsulting\Notifications\NotificationType;
 
 /**
  * Builds the mail of a delivery, in the current (the recipient's) locale. Type text goes through
- * Laravel's markdown template, which escapes it — the package never wraps it in HtmlString.
+ * Laravel's markdown template, which escapes it — the package never wraps it in HtmlString. With
+ * `notifications.mail.list_unsubscribe` on, a non-mandatory type's mail carries the
+ * List-Unsubscribe headers.
  *
  * @internal
  */
@@ -33,7 +35,7 @@ final class MailRenderer
                 $message->action($type->actionText($payload), $url);
             }
 
-            return self::footer($message, $type);
+            return UnsubscribeLinks::apply(self::footer($message, $type), $payload->recipient, $type);
         }
 
         $message = (new MailMessage)
@@ -52,7 +54,7 @@ final class MailRenderer
             $message->action($type->actionText($payload), $url);
         }
 
-        return $type->mail(self::footer($message, $type), $payload);
+        return UnsubscribeLinks::apply($type->mail(self::footer($message, $type), $payload), $payload->recipient, $type);
     }
 
     public static function minimal(NotificationType $type, ?Model $subject): bool

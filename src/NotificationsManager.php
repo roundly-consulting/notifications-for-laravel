@@ -30,6 +30,7 @@ use RoundlyConsulting\Notifications\Handles\PreferencesHandle;
 use RoundlyConsulting\Notifications\Handles\RemindersAccessor;
 use RoundlyConsulting\Notifications\Handles\SubjectHandle;
 use RoundlyConsulting\Notifications\Handles\TypesAccessor;
+use RoundlyConsulting\Notifications\Handles\UnsubscribeAccessor;
 use RoundlyConsulting\Notifications\Mail\InboxMessage;
 use RoundlyConsulting\Notifications\Models\InboxItem;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
@@ -158,6 +159,14 @@ class NotificationsManager
     public function deliveries(): DeliveriesAccessor
     {
         return new DeliveriesAccessor($this);
+    }
+
+    /**
+     * One-click unsubscribe links (List-Unsubscribe): build one, read one, redeem one.
+     */
+    public function unsubscribe(): UnsubscribeAccessor
+    {
+        return new UnsubscribeAccessor($this);
     }
 
     public function interop(): InteropAccessor

@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Notifications\Support;
 use Carbon\CarbonInterval;
 use Illuminate\Http\Resources\Json\JsonResource;
 use ReflectionClass;
+use RoundlyConsulting\Notifications\DataTransferObjects\MailRateLimit;
 use RoundlyConsulting\Notifications\DataTransferObjects\QuietHours;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Enums\MailStrategy;
@@ -250,6 +251,59 @@ final class NotificationsConfig
     public static function mailLease(): CarbonInterval
     {
         return self::duration('notifications.mail.lease', config('notifications.mail.lease'), 'PT10M', minSeconds: 60);
+    }
+
+    public static function listUnsubscribeEnabled(): bool
+    {
+        return Config::boolean('notifications.mail.list_unsubscribe.enabled', false);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function listUnsubscribeMiddleware(): array
+    {
+        return Config::list('notifications.mail.list_unsubscribe.middleware', []);
+    }
+
+    /**
+     * How long an unsubscribe link works; null: it never expires.
+     */
+    public static function listUnsubscribeTtl(): ?CarbonInterval
+    {
+        $value = config('notifications.mail.list_unsubscribe.ttl');
+
+        return self::blank($value) ? null : self::duration('notifications.mail.list_unsubscribe.ttl', $value, 'P30D', minSeconds: 3600);
+    }
+
+    public static function rateLimitEnabled(): bool
+    {
+        return Config::boolean('notifications.mail.rate_limit.enabled', false);
+    }
+
+    /**
+     * The default throttle's cap on mail to one recipient; null when its `max` is not set.
+     */
+    public static function rateLimitPerRecipient(): ?MailRateLimit
+    {
+        return self::rateLimit('notifications.mail.rate_limit.per_recipient', config('notifications.mail.rate_limit.per_recipient.max'), config('notifications.mail.rate_limit.per_recipient.per'));
+    }
+
+    /**
+     * The default throttle's cap on mail in one context (every recipient); null when its `max` is
+     * not set.
+     */
+    public static function rateLimitPerContext(): ?MailRateLimit
+    {
+        return self::rateLimit('notifications.mail.rate_limit.per_context', config('notifications.mail.rate_limit.per_context.max'), config('notifications.mail.rate_limit.per_context.per'));
+    }
+
+    /**
+     * What a limited mail does: `defer` (it waits until the limit frees up) or `skip` (cancelled).
+     */
+    public static function rateLimitWhenLimited(): string
+    {
+        return Config::oneOf('notifications.mail.rate_limit.when_limited', ['defer', 'skip'], 'defer');
     }
 
     // Quiet hours / timezone ---------------------------------------------------------------
@@ -538,6 +592,18 @@ final class NotificationsConfig
         }
 
         return $interval;
+    }
+
+    private static function rateLimit(string $key, mixed $max, mixed $per): ?MailRateLimit
+    {
+        if (self::blank($max)) {
+            return null;
+        }
+
+        $max = Config::integer($key.'.max', 1, min: 1, max: 1_000_000);
+        $per = self::duration($key.'.per', $per, 'PT1H', minSeconds: 1);
+
+        return new MailRateLimit($max, Durations::seconds($per));
     }
 
     private static function optionalString(string $key, mixed $value): ?string

@@ -53,7 +53,10 @@ final class DeliveryStates
         }
     }
 
-    public static function finish(NotificationDelivery $delivery, DeliveryStatus $status, CancelReason $reason, DeliveryStatus $from = DeliveryStatus::Sending): void
+    /**
+     * True when this call moved the row (the caller then owns any follow-up event).
+     */
+    public static function finish(NotificationDelivery $delivery, DeliveryStatus $status, CancelReason $reason, DeliveryStatus $from = DeliveryStatus::Sending): bool
     {
         $changed = self::transition($delivery, $from, [
             'status' => $status->value,
@@ -64,6 +67,8 @@ final class DeliveryStates
         if ($changed && $status === DeliveryStatus::Failed) {
             Event::dispatch(new NotificationMailFailed($delivery->refresh(), $reason));
         }
+
+        return $changed;
     }
 
     /**
@@ -80,6 +85,19 @@ final class DeliveryStates
         ])) {
             Event::dispatch(new NotificationMailHeld($delivery->refresh(), $until));
         }
+    }
+
+    /**
+     * A claim over the rate limit waits until `$until`, and gives its attempt back like a hold.
+     */
+    public static function defer(NotificationDelivery $delivery, CarbonImmutable $until): bool
+    {
+        return self::transition($delivery, DeliveryStatus::Sending, [
+            'status' => DeliveryStatus::Pending->value,
+            'send_after' => $until->format(Clock::FORMAT),
+            'attempts' => max(0, $delivery->attempts - 1),
+            'claimed_at' => null,
+        ]);
     }
 
     public static function retry(NotificationDelivery $delivery, CarbonImmutable $at): void

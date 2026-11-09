@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\RoutesNotifications;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use ReflectionMethod;
 use RoundlyConsulting\Notifications\DataTransferObjects\DoctorFinding;
 use RoundlyConsulting\Notifications\DefinedType;
@@ -47,6 +48,8 @@ final class Doctor
             $findings[] = new DoctorFinding('warning', sprintf('The preference lock store [%s] uses the %s driver: it is not shared across servers (set notifications.preferences.lock_store).', $store, $driver));
         }
 
+        array_push($findings, ...self::mail());
+
         try {
             NotificationsConfig::defaultQuietHours();
         } catch (Throwable $exception) {
@@ -56,6 +59,29 @@ final class Doctor
         array_push($findings, ...self::types(), ...self::interop(), ...self::userModel());
 
         $findings[] = new DoctorFinding('info', "Schedule: Schedule::command('notifications:sweep')->everyMinute()->withoutOverlapping(10)->onOneServer();");
+
+        return $findings;
+    }
+
+    /**
+     * @return list<DoctorFinding>
+     */
+    private static function mail(): array
+    {
+        $findings = [];
+
+        if (NotificationsConfig::listUnsubscribeEnabled() && ! str_starts_with(strtolower(URL::to('/')), 'https://')) {
+            $findings[] = new DoctorFinding('warning', 'List-Unsubscribe is on, but unsubscribe links are not https: mail gets List-Unsubscribe without the one-click List-Unsubscribe-Post header (RFC 8058). Set an https APP_URL.');
+        }
+
+        if (NotificationsConfig::rateLimitEnabled()) {
+            $store = config('cache.limiter') ?? config('cache.default');
+            $driver = is_string($store) ? config('cache.stores.'.$store.'.driver') : null;
+
+            if (in_array($driver, ['array', 'file'], true)) {
+                $findings[] = new DoctorFinding('warning', sprintf('The mail rate limit counts in the [%s] cache store (%s driver): it is not shared across servers (set cache.limiter).', $store, $driver));
+            }
+        }
 
         return $findings;
     }

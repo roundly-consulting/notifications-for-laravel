@@ -38,4 +38,5 @@ enum NotificationOperation: string
     case InboxMessage = 'inbox_message';
     case SubjectDeleted = 'subject_deleted';
     case Interop = 'interop';
+    case Unsubscribe = 'unsubscribe';
 }

@@ -18,6 +18,8 @@ use RoundlyConsulting\Notifications\Commands\SyncRemindersCommand;
 use RoundlyConsulting\Notifications\Commands\TypesCommand;
 use RoundlyConsulting\Notifications\Contracts\ResolvesGroupMembers;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
+use RoundlyConsulting\Notifications\Contracts\SuppressionList;
+use RoundlyConsulting\Notifications\Contracts\ThrottlesMail;
 use RoundlyConsulting\Notifications\Listeners\ApplyNotificationRules;
 use RoundlyConsulting\Notifications\Listeners\RecordInteropOutcome;
 use RoundlyConsulting\Notifications\Mail\InboxChannel;
@@ -26,9 +28,11 @@ use RoundlyConsulting\Notifications\Options\DigestPreference;
 use RoundlyConsulting\Notifications\Options\QuietHoursPreference;
 use RoundlyConsulting\Notifications\Options\TimezonePreference;
 use RoundlyConsulting\Notifications\Recipients\ContractGroupResolver;
+use RoundlyConsulting\Notifications\Support\DefaultMailThrottle;
 use RoundlyConsulting\Notifications\Support\DefaultTimezoneResolver;
 use RoundlyConsulting\Notifications\Support\InteropRules;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
+use RoundlyConsulting\Notifications\Support\NullSuppressionList;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Options\OptionsManager;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
@@ -48,6 +52,7 @@ final class NotificationsServiceProvider extends PackageServiceProvider
             ->hasTranslations()
             ->hasViews()
             ->hasRoutes('notifications.php', 'notifications.routes.enabled', enabledByDefault: false)
+            ->hasRoutes('unsubscribe.php', 'notifications.mail.list_unsubscribe.enabled', enabledByDefault: false)
             ->hasCommands([
                 SweepCommand::class,
                 PruneCommand::class,
@@ -62,6 +67,8 @@ final class NotificationsServiceProvider extends PackageServiceProvider
                     ? sprintf('ON (connection %s, queue %s)', NotificationsConfig::queueConnection() === null ? 'DEFAULT' : 'SET', NotificationsConfig::queueName() === null ? 'DEFAULT' : 'SET')
                     : 'OFF (inline)',
                 'Routes' => NotificationsConfig::routesEnabled() ? 'ON' : 'OFF',
+                'List-Unsubscribe' => NotificationsConfig::listUnsubscribeEnabled() ? 'ON' : 'OFF',
+                'Mail rate limit' => NotificationsConfig::rateLimitEnabled() ? 'ON ('.NotificationsConfig::rateLimitWhenLimited().')' : 'OFF',
                 'Key type' => NotificationsConfig::keyType()->value,
                 'Subject key type' => NotificationsConfig::subjectKeyType()->value,
                 'Primary key type' => NotificationsConfig::primaryKeyType()->value,
@@ -81,6 +88,8 @@ final class NotificationsServiceProvider extends PackageServiceProvider
 
         $this->bindFromConfig(ResolvesGroupMembers::class, 'notifications.recipients.group_resolver', ContractGroupResolver::class);
         $this->bindFromConfig(ResolvesTimezone::class, 'notifications.timezone.resolver', DefaultTimezoneResolver::class);
+        $this->bindFromConfig(SuppressionList::class, 'notifications.mail.suppression_list', NullSuppressionList::class);
+        $this->bindFromConfig(ThrottlesMail::class, 'notifications.mail.rate_limit.throttle', DefaultMailThrottle::class);
     }
 
     public function boot(): void

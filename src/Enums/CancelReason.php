@@ -29,4 +29,6 @@ enum CancelReason: string
     case Unknown = 'unknown';
     case Payload = 'payload';
     case NoAddress = 'no_address';
+    case Suppressed = 'suppressed';
+    case RateLimited = 'rate_limited';
 }

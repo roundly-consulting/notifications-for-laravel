@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Actions\Delivery;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Notifications\Contracts\ResolvesTimezone;
+use RoundlyConsulting\Notifications\Contracts\ThrottlesMail;
+use RoundlyConsulting\Notifications\DataTransferObjects\MailAttempt;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\Priority;
+use RoundlyConsulting\Notifications\Events\NotificationMailSuppressed;
+use RoundlyConsulting\Notifications\Events\NotificationMailThrottled;
 use RoundlyConsulting\Notifications\Mail\TypedMailNotification;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Support\Access;
@@ -20,6 +26,7 @@ use RoundlyConsulting\Notifications\Support\DeliveryStates;
 use RoundlyConsulting\Notifications\Support\Locales;
 use RoundlyConsulting\Notifications\Support\MailAddresses;
 use RoundlyConsulting\Notifications\Support\MailRenderer;
+use RoundlyConsulting\Notifications\Support\MailSuppression;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
@@ -33,7 +40,8 @@ use Throwable;
  * Sends one due delivery, at most once. The row is claimed by compare-and-set (`pending|held →
  * sending`), so a retried or re-dispatched job, or a second scheduler, sends nothing. Before
  * sending it re-checks the recipient, type, subject, access, mutes and quiet hours, and resolves
- * the address itself (Laravel's mail channel returns silently on a null route).
+ * the address itself (Laravel's mail channel returns silently on a null route). Last, the
+ * SuppressionList and (when on) the ThrottlesMail rate limit are asked.
  *
  * @internal
  */
@@ -124,6 +132,23 @@ final readonly class DeliverMailAction
         }
 
         try {
+            $suppressed = MailSuppression::suppressed($recipient, $address);
+
+            if ($suppressed !== []) {
+                if (DeliveryStates::finish($delivery, DeliveryStatus::Undeliverable, CancelReason::Suppressed)) {
+                    Event::dispatch(new NotificationMailSuppressed($recipient, $suppressed, $delivery->refresh()));
+                }
+
+                return;
+            }
+
+            if (NotificationsConfig::rateLimitEnabled()
+                && ($until = app(ThrottlesMail::class)->attempt(new MailAttempt($recipient, $type, $delivery->context_key, $id))) !== null) {
+                self::limited($delivery, $until);
+
+                return;
+            }
+
             if ($address === true) {
                 Notification::sendNow($recipient, $notification);
             } else {
@@ -143,6 +168,26 @@ final readonly class DeliverMailAction
         }
 
         DeliveryStates::sent($delivery);
+    }
+
+    /**
+     * Over the rate limit: wait until the limit frees up (`defer`), or cancel (`skip`).
+     */
+    private static function limited(NotificationDelivery $delivery, CarbonImmutable $until): void
+    {
+        if (NotificationsConfig::rateLimitWhenLimited() === 'skip') {
+            if (DeliveryStates::finish($delivery, DeliveryStatus::Cancelled, CancelReason::RateLimited)) {
+                Event::dispatch(new NotificationMailThrottled($delivery->refresh(), $until, deferred: false));
+            }
+
+            return;
+        }
+
+        $until = $until->max(Clock::now()->addSecond());
+
+        if (DeliveryStates::defer($delivery, $until)) {
+            Event::dispatch(new NotificationMailThrottled($delivery->refresh(), $until, deferred: true));
+        }
     }
 
     private static function retryOrFail(NotificationDelivery $delivery): void

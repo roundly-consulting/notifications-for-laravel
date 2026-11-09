@@ -14,6 +14,7 @@ use RoundlyConsulting\Notifications\Tests\Fixtures\HttpTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\InstallTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\SwappedModelsTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\UlidKeyTestCase;
+use RoundlyConsulting\Notifications\Tests\Fixtures\UnsubscribeTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\UuidKeyTestCase;
 use RoundlyConsulting\Notifications\Tests\TestCase;
 
@@ -21,6 +22,7 @@ use RoundlyConsulting\Notifications\Tests\TestCase;
 uses(TestCase::class)->in('Arch', 'Feature', 'Unit', 'Acceptance', 'RealEngine');
 uses(SwappedModelsTestCase::class)->in('ModelSwap');
 uses(HttpTestCase::class)->in('Http');
+uses(UnsubscribeTestCase::class)->in('Unsubscribe');
 uses(InstallTestCase::class)->in('Install');
 uses(ContactsTestCase::class)->in('Contacts');
 uses(UuidKeyTestCase::class)->in('KeyTypes/UuidKeyTest.php');

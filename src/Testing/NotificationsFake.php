@@ -16,6 +16,7 @@ use RoundlyConsulting\Notifications\Enums\NotificationOperation;
 use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Support\SendValidation;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
+use RoundlyConsulting\Notifications\Support\UnsubscribeTokens;
 use Throwable;
 
 /**
@@ -292,6 +293,25 @@ final class NotificationsFake extends NotificationsManager
         PHPUnit::assertNotEmpty($matching, 'Expected the user\'s preferences to be updated, but they were not.');
     }
 
+    /**
+     * A one-click unsubscribe link was redeemed — for the recipient and type, when given.
+     */
+    public function assertUnsubscribed(?Model $recipient = null, ?string $type = null): void
+    {
+        $type = $type === null ? null : $this->typeKey($type);
+        $matching = array_filter($this->recorded(NotificationOperation::Unsubscribe), static fn (RecordedOperation $op): bool => $op->concerns($recipient, 'recipient')
+            && ($type === null || $op->context['type'] === $type));
+
+        PHPUnit::assertNotEmpty($matching, $type === null
+            ? 'Expected an unsubscribe link to be redeemed, but none was.'
+            : sprintf('Expected an unsubscribe from [%s] to be redeemed, but none was.', $type));
+    }
+
+    public function assertNothingUnsubscribed(): void
+    {
+        $this->assertNothingOf([NotificationOperation::Unsubscribe], 'Expected no unsubscribe link to be redeemed, but %d were.');
+    }
+
     // Reminders --------------------------------------------------------------------------
 
     public function assertRemindersSynced(Model $subject): void
@@ -465,6 +485,13 @@ final class NotificationsFake extends NotificationsManager
     private function record(NotificationOperation $operation, array $context): RecordedOperation
     {
         $data = $context['data'] ?? null;
+
+        // An unsubscribe records the recipient and type its link names; a bad link throws as in
+        // production.
+        if ($operation === NotificationOperation::Unsubscribe && is_string($context['token'] ?? null)) {
+            $claim = UnsubscribeTokens::read($context['token']);
+            $context += ['recipient' => $claim->recipient, 'type' => $claim->type];
+        }
 
         // Types are recorded by key, as the real operations store them (a class-string resolves).
         if (is_string($context['type'] ?? null)) {

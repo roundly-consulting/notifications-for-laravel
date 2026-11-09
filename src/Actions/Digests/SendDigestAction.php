@@ -12,6 +12,7 @@ use RoundlyConsulting\Notifications\Enums\CancelReason;
 use RoundlyConsulting\Notifications\Enums\DeliveryStatus;
 use RoundlyConsulting\Notifications\Enums\DigestRunStatus;
 use RoundlyConsulting\Notifications\Events\DigestSent;
+use RoundlyConsulting\Notifications\Events\NotificationMailSuppressed;
 use RoundlyConsulting\Notifications\Mail\DigestMailNotification;
 use RoundlyConsulting\Notifications\Models\DigestRun;
 use RoundlyConsulting\Notifications\Models\NotificationDelivery;
@@ -23,6 +24,7 @@ use RoundlyConsulting\Notifications\Support\DigestRenderer;
 use RoundlyConsulting\Notifications\Support\DigestRuns;
 use RoundlyConsulting\Notifications\Support\Locales;
 use RoundlyConsulting\Notifications\Support\MailAddresses;
+use RoundlyConsulting\Notifications\Support\MailSuppression;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
 use RoundlyConsulting\Notifications\Support\NotificationsConfig;
@@ -32,7 +34,8 @@ use Throwable;
 /**
  * Sends one claimed digest run. Every entry is re-checked (access, mutes) and dropped when it no
  * longer passes; a run with nothing left sends no mail. The address comes from
- * `notifications.mail.address_resolver` when one is configured, exactly as for typed mail. A failed send leaves the run pending for
+ * `notifications.mail.address_resolver` when one is configured, exactly as for typed mail, and a
+ * suppressed address (SuppressionList) fails the run. A failed send leaves the run pending for
  * the next sweep until `notifications.mail.max_attempts`.
  *
  * @internal
@@ -81,6 +84,15 @@ final readonly class SendDigestAction
 
             if ($address === false) {
                 DigestRuns::finish($run, DigestRunStatus::Failed, CancelReason::NoAddress);
+
+                return;
+            }
+
+            $suppressed = MailSuppression::suppressed($recipient, $address);
+
+            if ($suppressed !== []) {
+                DigestRuns::finish($run, DigestRunStatus::Failed, CancelReason::Suppressed);
+                Event::dispatch(new NotificationMailSuppressed($recipient, $suppressed, digestRun: $run->refresh()));
 
                 return;
             }

@@ -40,4 +40,5 @@ return [
     'invalid_escalation_type' => 'The notification type ":type" sends ":escalation", which is not registered or not about the same subject, when it escalates.',
     'invalid_interop_mapping' => ':notification is mapped to the unknown notification type ":type".',
     'interop_time_critical' => ':notification is time-critical and may only map to an urgent type without a window that is not digestible (":type" is not).',
+    'invalid_unsubscribe_token' => 'This unsubscribe link is invalid or has expired.',
 ];

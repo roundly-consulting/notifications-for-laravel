@@ -6,6 +6,33 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 
 ## Unreleased
 
+### Added
+
+- One-click unsubscribe (opt-in, `notifications.mail.list_unsubscribe.enabled`): the mail of
+  every non-mandatory type carries a `List-Unsubscribe` header (RFC 2369) and, over https, the
+  one-click `List-Unsubscribe-Post: List-Unsubscribe=One-Click` header (RFC 8058). The link holds
+  an encrypted, signed token (app key; `app.previous_keys` keep old links working; optional
+  `ttl`) and answers at `<routes.prefix>/unsubscribe/{token}` without login, session or CSRF: POST
+  switches the type's mail off for the recipient — the same per-type preference
+  `preferences($user)->mute($type, Channel::Mail)` writes — idempotently; GET only shows a
+  confirmation page (en + sk). New `Notifications::unsubscribe()` accessor (`url()`, `claim()`,
+  `redeem()` → `UnsubscribeResult` with an `UnsubscribeOutcome`), `InvalidUnsubscribeTokenException`
+  (403, `invalid_unsubscribe_token`) and fake asserts `assertUnsubscribed()` /
+  `assertNothingUnsubscribed()`. Digests carry no header.
+- Suppression list: the `SuppressionList` contract (`isSuppressed(string $address): bool`) is
+  asked before every typed mail and digest, through `notifications.mail.suppression_list` or a
+  container binding (default `NullSuppressionList`, which suppresses nothing). A suppressed
+  address stops the mail — the delivery ends `undeliverable` / `suppressed`, a digest run
+  `failed` — and `NotificationMailSuppressed` fires.
+- Mail rate limit (opt-in, `notifications.mail.rate_limit.enabled`): the `ThrottlesMail` contract
+  is asked right before a typed mail is sent; the default `DefaultMailThrottle` counts per
+  recipient and per context with Laravel's RateLimiter (`per_recipient`, `per_context`, never
+  limiting urgent types). A limited mail is deferred until the limit frees up or skipped
+  (`when_limited`: `defer` | `skip`, cancelled `rate_limited`), and `NotificationMailThrottled`
+  fires.
+- `CancelReason::Suppressed` and `CancelReason::RateLimited`; `notifications:doctor` warns when
+  unsubscribe links are not https and when the rate limit counts in a per-server cache store.
+
 ### Changed
 
 - Behaviour change: muting the inbox for a whole category while

@@ -11,7 +11,9 @@ use RoundlyConsulting\Notifications\Models\NotificationDelivery;
 use RoundlyConsulting\Notifications\Models\NotificationReceipt;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
 use RoundlyConsulting\Notifications\Recipients\ContractGroupResolver;
+use RoundlyConsulting\Notifications\Support\DefaultMailThrottle;
 use RoundlyConsulting\Notifications\Support\DefaultTimezoneResolver;
+use RoundlyConsulting\Notifications\Support\NullSuppressionList;
 
 /*
 |--------------------------------------------------------------------------
@@ -120,6 +122,34 @@ return [
         'backoff' => [60, 300, 900],
         // A mail claimed longer ago than this is failed, never re-sent.
         'lease' => 'PT10M',
+
+        // One-click unsubscribe (RFC 2369 + RFC 8058) on the mail of non-mandatory types: a
+        // List-Unsubscribe header with a signed link that switches the type's mail off for the
+        // recipient. With an https link the List-Unsubscribe-Post one-click header is added too.
+        // The link answers at `<routes.prefix>/unsubscribe/{token}` with no login and no CSRF.
+        'list_unsubscribe' => [
+            'enabled' => env('NOTIFICATIONS_LIST_UNSUBSCRIBE', 'off'),
+            'middleware' => [],
+            // How long a link works (ISO-8601); null: it never expires.
+            'ttl' => null,
+        ],
+
+        // Asked before every typed mail and digest: a SuppressionList class (or bind the
+        // contract). A suppressed address gets no mail.
+        'suppression_list' => NullSuppressionList::class,
+
+        // Caps on typed mail before it is sent. Urgent types are never limited by the default
+        // throttle. `when_limited`: defer (send once the limit frees up) or skip.
+        'rate_limit' => [
+            'enabled' => env('NOTIFICATIONS_MAIL_RATE_LIMIT', 'off'),
+            // A ThrottlesMail class; the default counts with Laravel's RateLimiter.
+            'throttle' => DefaultMailThrottle::class,
+            // Mail to one recipient.
+            'per_recipient' => ['max' => 20, 'per' => 'PT1H'],
+            // Mail in one context, whoever receives it; a null max turns it off.
+            'per_context' => ['max' => null, 'per' => 'PT1H'],
+            'when_limited' => 'defer',
+        ],
     ],
 
     'quiet_hours' => [
