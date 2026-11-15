@@ -4,6 +4,44 @@ All notable changes to `notifications-for-laravel` are documented in this file. 
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## 1.3.0 - 2026-11-15
+
+### Added
+
+- Repeating reminders: `Reminder::every($interval)` (`CarbonInterval`, ISO-8601 or relative such
+  as `'7 days'`) on a type rule, anchored to `->from($attribute)` or to when it was scheduled,
+  with `->startingAfter($delay)` for the first one, `->times($max)` and
+  `->until(CarbonInterface|Closure $end)`. Each recipient gets their own chain; every firing writes
+  the chain's next row, so `fireDue()` stays a plain due-time query.
+- A chain ends when its recipient acknowledges (`acknowledge(by:)`, `acknowledgedOnRead()`), when
+  `while()` turns false, when the subject's reminders are cancelled, when the anchor is cleared,
+  or at `times()` / `until()`. `schedule()` again only adds recipients who have no chain for the
+  current anchor; `sync()` re-times open reminders when the anchor moves, and restarts ended chains
+  when it moves later (`->rearm(false)` turns that off). A reminder too late to send is skipped
+  and the chain continues, with no burst.
+- `escalate()` on a repeating rule arms each level once per chain: a delay counts from the first
+  reminder, and `escalate(3, to: …)` escalates after the 3rd unacknowledged reminder. A recipient's
+  acknowledgement cancels only their own chain's escalations.
+- Fake: `withReminders()` runs the reminder operations for real while recording the sends they
+  fire, `fireDueReminders()`, and `assertReminded($user, $type, times:)`, `assertNotReminded()`,
+  `assertEscalated()`.
+- `NotificationReminder::recipient()` (`MorphTo`) and `isRepeating()`;
+  `InvalidReminderRuleException::invalidRepeat()` (`invalid_repeat`, en + sk).
+
+### Changed
+
+- `acknowledge(by: $user)` ends only `$user`'s repeating chain. One-off reminders and send
+  escalations are acknowledged subject-wide as before.
+- Reminder and escalation sends now go through the manager, so `Notifications::fake()` records them
+  like any other send. Production delivery is unchanged.
+
+### Upgrade
+
+- Publish and run the new migration, which adds a nullable `recipient` morph (following
+  `notifications.key_type`) to `notification_reminders`:
+  `php artisan vendor:publish --tag=notifications-migrations` and `php artisan migrate`. It is
+  additive; existing reminders are unchanged.
+
 ## 1.2.0 - 2026-11-09
 
 ### Added
