@@ -48,6 +48,7 @@ use RoundlyConsulting\Notifications\Support\NotificationsConfig;
  * @property int|string|null $acknowledger_id
  * @property string|null $recipient_type
  * @property int|string|null $recipient_id
+ * @property CarbonImmutable|null $snoozed_until
  * @property CancelReason|null $cancel_reason
  * @property int $attempts
  * @property CarbonImmutable|null $created_at
@@ -116,6 +117,14 @@ class NotificationReminder extends Model
     }
 
     /**
+     * Whether the row's repeating chain was snoozed: its slots count from `snoozed_until`.
+     */
+    public function isSnoozed(): bool
+    {
+        return $this->snoozed_until !== null;
+    }
+
+    /**
      * @return BelongsTo<NotificationReminder, $this>
      */
     public function parent(): BelongsTo
@@ -149,6 +158,7 @@ class NotificationReminder extends Model
             'claimed_at' => UtcDateTime::class,
             'fired_at' => UtcDateTime::class,
             'acknowledged_at' => UtcDateTime::class,
+            'snoozed_until' => UtcDateTime::class,
             'created_at' => UtcDateTime::class,
             'updated_at' => UtcDateTime::class,
             'deleted_at' => UtcDateTime::class,

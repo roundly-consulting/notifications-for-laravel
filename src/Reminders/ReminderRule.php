@@ -287,7 +287,21 @@ final class ReminderRule
      */
     public function nextDue(CarbonImmutable $anchor, CarbonImmutable $after): CarbonImmutable
     {
-        $first = self::dueAt($anchor, $this->slotOffset(0));
+        return $this->firstSlotAfter($anchor, $after, skipsFirstDelay: false);
+    }
+
+    /**
+     * The first reminder of a snoozed chain due strictly after `$after`: `$from` (the snooze) plus
+     * whole intervals — the first delay no longer applies. Counted from `$from` like nextDue().
+     */
+    public function nextSnoozed(CarbonImmutable $from, CarbonImmutable $after): CarbonImmutable
+    {
+        return $this->firstSlotAfter($from, $after, skipsFirstDelay: true);
+    }
+
+    private function firstSlotAfter(CarbonImmutable $anchor, CarbonImmutable $after, bool $skipsFirstDelay): CarbonImmutable
+    {
+        $first = self::dueAt($anchor, $this->slotOffset(0, $skipsFirstDelay));
 
         if ($first->greaterThan($after)) {
             return $first;
@@ -296,11 +310,11 @@ final class ReminderRule
         $step = max(1, Durations::seconds($this->every ?? CarbonInterval::seconds(1)));
         $k = max(1, intdiv($after->getTimestamp() - $first->getTimestamp(), $step));
 
-        while ($k > 1 && self::dueAt($anchor, $this->slotOffset($k - 1))->greaterThan($after)) {
+        while ($k > 1 && self::dueAt($anchor, $this->slotOffset($k - 1, $skipsFirstDelay))->greaterThan($after)) {
             $k--;
         }
 
-        while (! ($due = self::dueAt($anchor, $this->slotOffset($k)))->greaterThan($after)) {
+        while (! ($due = self::dueAt($anchor, $this->slotOffset($k, $skipsFirstDelay)))->greaterThan($after)) {
             $k++;
         }
 
@@ -308,11 +322,12 @@ final class ReminderRule
     }
 
     /**
-     * The anchor-relative offset of slot `$k`: the first delay plus `$k` intervals.
+     * The anchor-relative offset of slot `$k`: the first delay (none after a snooze) plus `$k`
+     * intervals.
      */
-    private function slotOffset(int $k): string
+    private function slotOffset(int $k, bool $skipsFirstDelay = false): string
     {
-        $start = $this->startingAfter ?? $this->every ?? CarbonInterval::seconds(0);
+        $start = $skipsFirstDelay ? CarbonInterval::seconds(0) : ($this->startingAfter ?? $this->every ?? CarbonInterval::seconds(0));
         $every = $this->every ?? CarbonInterval::seconds(0);
 
         return Durations::toIso(CarbonInterval::create(

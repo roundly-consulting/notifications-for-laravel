@@ -13,6 +13,7 @@ use RoundlyConsulting\Notifications\Tests\Fixtures\ContactsTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\HttpTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\InstallTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\SwappedModelsTestCase;
+use RoundlyConsulting\Notifications\Tests\Fixtures\UlidHostKeyTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\UlidKeyTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\UnsubscribeTestCase;
 use RoundlyConsulting\Notifications\Tests\Fixtures\UuidKeyTestCase;
@@ -27,6 +28,7 @@ uses(InstallTestCase::class)->in('Install');
 uses(ContactsTestCase::class)->in('Contacts');
 uses(UuidKeyTestCase::class)->in('KeyTypes/UuidKeyTest.php');
 uses(UlidKeyTestCase::class)->in('KeyTypes/UlidKeyTest.php');
+uses(UlidHostKeyTestCase::class)->in('KeyTypes/UlidHostKeyTest.php');
 
 /**
  * @param  array<string, mixed>  $attributes

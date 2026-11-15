@@ -89,6 +89,18 @@ Notifications::inbox($user)->unreadCount();                   // 3
 Notifications::inbox($user)->markAllRead();
 ```
 
+### Per-recipient reminders
+
+A repeating reminder ("weekly until acknowledged") can be controlled for one person:
+
+```php
+$reminders = Notifications::for($policy)->reminders();
+
+$reminders->snooze('policy.acknowledge', $user, until: now()->addDays(3)); // next one then, weekly after
+$reminders->cancel('policy.acknowledge', for: $user);                      // only this person's chain
+$reminders->schedule('policy.acknowledge', $users, restart: true);         // start ended chains again
+```
+
 <!-- roundly-docs:start -->
 ## Documentation
 

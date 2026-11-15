@@ -33,12 +33,13 @@ final class ReminderChains
      * Start a chain for every recipient that has none for the rule's current anchor. A recipient
      * whose chain is open, or already ran for this anchor (acknowledged, ended, cancelled), is left
      * alone — so scheduling again only adds the newcomers. A chain that ran for an EARLIER anchor
-     * starts over when the rule re-arms.
+     * starts over when the rule re-arms. `$restart` starts a fresh chain for every recipient
+     * without an open one, however their last chain ended — an open chain is still kept.
      *
      * @param  list<Model>  $recipients
      * @return list<NotificationReminder>
      */
-    public static function start(Model $subject, NotificationType $type, ReminderRule $rule, array $recipients, CarbonImmutable $now): array
+    public static function start(Model $subject, NotificationType $type, ReminderRule $rule, array $recipients, CarbonImmutable $now, bool $restart = false): array
     {
         $anchor = self::anchor($subject, $rule, $now);
 
@@ -49,7 +50,7 @@ final class ReminderChains
         $started = [];
 
         foreach ($recipients as $recipient) {
-            $row = self::startFor($subject, $type, $rule, $recipient, $anchor, $now);
+            $row = self::startFor($subject, $type, $rule, $recipient, $anchor, $now, $restart);
 
             if ($row !== null) {
                 $started[] = $row;
@@ -94,7 +95,7 @@ final class ReminderChains
     /**
      * Write the chain's next row after `$row` fired (`$level` = its number) or was skipped
      * (`$level` = the row's own). Null when the chain is done: `times()` reached, or the next
-     * reminder would fall after `until()`.
+     * reminder would fall after `until()`. A snoozed chain keeps counting from its snooze.
      */
     public static function next(NotificationReminder $row, ReminderRule $rule, Model $subject, CarbonImmutable $now, int $level): ?NotificationReminder
     {
@@ -105,7 +106,8 @@ final class ReminderChains
         }
 
         $after = $row->due_at->greaterThan($now) ? $row->due_at : $now;
-        $due = $rule->nextDue($row->anchor_value, $after);
+        $snoozed = $row->snoozed_until;
+        $due = $snoozed === null ? $rule->nextDue($row->anchor_value, $after) : $rule->nextSnoozed($snoozed, $after);
         $end = $rule->endFor($subject);
 
         if ($end !== null && $due->greaterThan($end)) {
@@ -118,7 +120,40 @@ final class ReminderChains
             return null;
         }
 
-        return self::insert($subject, $row->type, $rule, $recipient, $row->anchor_value, $due, $level);
+        return self::insert($subject, $row->type, $rule, $recipient, $row->anchor_value, $due, $level, $snoozed);
+    }
+
+    /**
+     * Snooze one recipient's open row of the chain: it is due at `$until`, and every later
+     * reminder whole intervals after it; other recipients keep their slots. `level`, `times()`
+     * and armed escalations are untouched. No open row: nothing (a snooze never starts a chain).
+     * `$until` after the rule's `until()`: the chain ends (`passed`).
+     */
+    public static function snooze(Model $subject, NotificationType $type, ReminderRule $rule, Model $recipient, CarbonImmutable $until): int
+    {
+        $row = self::rows($subject, $type, $rule)
+            ->where('recipient_type', $recipient->getMorphClass())
+            ->where('recipient_id', $recipient->getKey())
+            ->where('status', ReminderStatus::Pending->value)
+            ->lockForUpdate()
+            ->first();
+
+        if ($row === null || (Anchors::same($row->due_at, $until) && Anchors::same($row->snoozed_until, $until))) {
+            return 0;
+        }
+
+        $end = $rule->endFor($subject);
+
+        if ($end !== null && $until->greaterThan($end)) {
+            ReminderRows::cancel($row, CancelReason::Passed);
+
+            return 1;
+        }
+
+        $row->forceFill(['snoozed_until' => $until]);
+        ReminderRows::reschedule($row, $until, $row->anchor_value);
+
+        return 1;
     }
 
     /**
@@ -146,6 +181,11 @@ final class ReminderChains
             return 1;
         }
 
+        if ($row->snoozed_until !== null) {
+            // A moved anchor is a new cadence: the snooze was for the old one.
+            $row->forceFill(['snoozed_until' => null]);
+        }
+
         ReminderRows::reschedule($row, $due, $anchor);
 
         return 1;
@@ -161,7 +201,7 @@ final class ReminderChains
         return $attribute === null ? $now : Anchors::read($subject, $attribute);
     }
 
-    private static function startFor(Model $subject, NotificationType $type, ReminderRule $rule, Model $recipient, CarbonImmutable $anchor, CarbonImmutable $now): ?NotificationReminder
+    private static function startFor(Model $subject, NotificationType $type, ReminderRule $rule, Model $recipient, CarbonImmutable $anchor, CarbonImmutable $now, bool $restart): ?NotificationReminder
     {
         $rows = self::rows($subject, $type, $rule)
             ->where('recipient_type', $recipient->getMorphClass())
@@ -173,7 +213,7 @@ final class ReminderChains
             return null;
         }
 
-        if ($rows->isNotEmpty()) {
+        if ($rows->isNotEmpty() && ! $restart) {
             // A chain anchored to scheduling runs once per recipient; an anchored one once per
             // anchor value, and again only when the anchor moved later and the rule re-arms.
             $latest = $rows->max(static fn (NotificationReminder $row): int => $row->anchor_value?->getTimestamp() ?? 0);
@@ -183,8 +223,17 @@ final class ReminderChains
             }
         }
 
-        // A slot exactly now still counts: a zero first delay sends at once.
-        $due = $rule->nextDue($anchor, $now->subSecond());
+        // A slot exactly now still counts: a zero first delay sends at once. A restart never
+        // repeats a slot this anchor's earlier chain already sent.
+        $after = $now->subSecond();
+
+        foreach ($rows as $row) {
+            if ($row->status === ReminderStatus::Sent && Anchors::same($row->anchor_value, $anchor) && $row->due_at->greaterThan($after)) {
+                $after = $row->due_at;
+            }
+        }
+
+        $due = $rule->nextDue($anchor, $after);
         $end = $rule->endFor($subject);
 
         if ($end !== null && $due->greaterThan($end)) {
@@ -194,10 +243,16 @@ final class ReminderChains
         return self::insert($subject, $type->key(), $rule, $recipient, $anchor, $due, 1);
     }
 
-    private static function insert(Model $subject, string $type, ReminderRule $rule, Model $recipient, CarbonImmutable $anchor, CarbonImmutable $due, int $level): ?NotificationReminder
+    private static function insert(Model $subject, string $type, ReminderRule $rule, Model $recipient, CarbonImmutable $anchor, CarbonImmutable $due, int $level, ?CarbonImmutable $snoozedUntil = null): ?NotificationReminder
     {
         $class = NotificationModels::reminder();
         $row = new $class;
+
+        if ($snoozedUntil !== null) {
+            // Written only when set: a host that has not run the 1.4 migration keeps working.
+            $row->forceFill(['snoozed_until' => $snoozedUntil]);
+        }
+
         $row->forceFill([
             'kind' => ReminderKind::Reminder,
             'type' => $type,

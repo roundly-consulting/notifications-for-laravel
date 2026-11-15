@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Notifications\Testing;
 
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert as PHPUnit;
@@ -16,6 +17,7 @@ use RoundlyConsulting\Notifications\Enums\Channel;
 use RoundlyConsulting\Notifications\Enums\DigestFrequency;
 use RoundlyConsulting\Notifications\Enums\NotificationOperation;
 use RoundlyConsulting\Notifications\NotificationsManager;
+use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\SendValidation;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 use RoundlyConsulting\Notifications\Support\UnsubscribeTokens;
@@ -27,8 +29,8 @@ use Throwable;
  * calls through the model traits — is recorded and NOT executed. Reads pass through to the real
  * store. `passthrough()` records and runs.
  *
- * `withReminders()` runs the reminder bookkeeping for real (schedule, sync, cancel, acknowledge and
- * the fire step write their rows) while the sends a reminder fires stay recorded — so a test can
+ * `withReminders()` runs the reminder bookkeeping for real (schedule, sync, cancel, snooze,
+ * acknowledge and the fire step write their rows) while the sends a reminder fires stay recorded — so a test can
  * travel in time, `fireDueReminders()` and `assertReminded($user, $type, times: 2)`.
  *
  * Recipient resolution still runs, so `assertSent(to: $user)` works with `Recipients::role()`.
@@ -50,6 +52,7 @@ final class NotificationsFake extends NotificationsManager
         NotificationOperation::SyncReminders,
         NotificationOperation::Remind,
         NotificationOperation::CancelReminders,
+        NotificationOperation::SnoozeReminders,
         NotificationOperation::Acknowledge,
         NotificationOperation::FireReminders,
         NotificationOperation::BackfillReminders,
@@ -368,17 +371,22 @@ final class NotificationsFake extends NotificationsManager
         $this->assertRecordedFor([NotificationOperation::SyncReminders], 'subject', $subject, 'Expected the reminders of the subject to be synced, but they were not.');
     }
 
-    public function assertReminderScheduled(Model $subject, string $type): void
+    /**
+     * `$restart` true: only a `schedule(…, restart: true)` matches; false: only one without it;
+     * null: any.
+     */
+    public function assertReminderScheduled(Model $subject, string $type, ?bool $restart = null): void
     {
         $type = $this->typeKey($type);
         $matching = array_filter(
             $this->recorded(),
             static fn (RecordedOperation $op): bool => in_array($op->operation, [NotificationOperation::ScheduleReminders, NotificationOperation::Remind], true)
                 && $op->concerns($subject, 'subject')
-                && ($op->context['type'] ?? null) === $type,
+                && ($op->context['type'] ?? null) === $type
+                && ($restart === null || ($op->context['restart'] ?? false) === $restart),
         );
 
-        PHPUnit::assertNotEmpty($matching, sprintf('Expected a [%s] reminder to be scheduled, but none was.', $type));
+        PHPUnit::assertNotEmpty($matching, sprintf('Expected a [%s] reminder to be %s, but none was.', $type, $restart === true ? 'restarted' : 'scheduled'));
     }
 
     /**
@@ -394,9 +402,33 @@ final class NotificationsFake extends NotificationsManager
         ], 'Expected no reminders to be scheduled, but %d operation(s) were recorded.');
     }
 
-    public function assertRemindersCancelled(Model $subject): void
+    /**
+     * `$for`: only a `cancel(for: $recipient)` of that recipient matches.
+     */
+    public function assertRemindersCancelled(Model $subject, ?Model $for = null): void
     {
-        $this->assertRecordedFor([NotificationOperation::CancelReminders], 'subject', $subject, 'Expected the reminders of the subject to be cancelled, but they were not.');
+        $matching = array_filter($this->recorded(NotificationOperation::CancelReminders), static fn (RecordedOperation $op): bool => $op->concerns($subject, 'subject')
+            && $op->concerns($for, 'recipient'));
+
+        PHPUnit::assertNotEmpty($matching, $for === null
+            ? 'Expected the reminders of the subject to be cancelled, but they were not.'
+            : 'Expected the recipient\'s reminders of the subject to be cancelled, but they were not.');
+    }
+
+    /**
+     * A `reminders()->snooze()` on the subject — for the recipient, type and instant, when given.
+     */
+    public function assertRemindersSnoozed(Model $subject, ?Model $recipient = null, ?string $type = null, ?CarbonInterface $until = null): void
+    {
+        $type = $type === null ? null : $this->typeKey($type);
+        $matching = array_filter($this->recorded(NotificationOperation::SnoozeReminders), static fn (RecordedOperation $op): bool => $op->concerns($subject, 'subject')
+            && $op->concerns($recipient, 'recipient')
+            && ($type === null || ($op->context['type'] ?? null) === $type)
+            && ($until === null || ($op->context['until'] instanceof CarbonInterface && Clock::format($op->context['until']) === Clock::format($until))));
+
+        PHPUnit::assertNotEmpty($matching, $type === null
+            ? 'Expected reminders of the subject to be snoozed, but none were.'
+            : sprintf('Expected [%s] reminders of the subject to be snoozed, but none were.', $type));
     }
 
     public function assertAcknowledged(Model $subject, ?string $type = null): void

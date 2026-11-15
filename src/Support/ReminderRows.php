@@ -65,13 +65,17 @@ final class ReminderRows
     }
 
     /**
-     * Cancel every pending reminder and escalation of a subject (and type).
+     * Cancel every pending reminder and escalation of a subject (and type) — or, with `$recipient`,
+     * only the rows of that recipient's repeating chains.
      */
-    public static function cancelPending(Model $subject, ?string $type, CancelReason $reason, ?ReminderKind $kind = null): int
+    public static function cancelPending(Model $subject, ?string $type, CancelReason $reason, ?ReminderKind $kind = null, ?Model $recipient = null): int
     {
         $rows = self::forSubject($subject, $type)
             ->where('status', ReminderStatus::Pending->value)
             ->when($kind !== null, static fn (Builder $query): Builder => $query->where('kind', $kind?->value))
+            ->when($recipient !== null, static fn (Builder $query): Builder => $query
+                ->where('recipient_type', $recipient?->getMorphClass())
+                ->where('recipient_id', $recipient?->getKey()))
             ->lockForUpdate()
             ->get();
 

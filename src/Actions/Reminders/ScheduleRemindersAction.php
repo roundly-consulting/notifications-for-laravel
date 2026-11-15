@@ -23,7 +23,10 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
  *
  * A repeating rule (`Reminder::every()`) starts one chain per recipient instead: a recipient whose
  * chain is running or already ran for the current anchor keeps it, so calling this again with a
- * longer list only adds the newcomers.
+ * longer list only adds the newcomers. `$restart` starts a fresh chain (level 1, at the anchor's
+ * next slot) for every recipient whose chain ended — acknowledged, `while()` false, cancelled,
+ * `times()` / `until()` reached — even for the same anchor; an open chain is still kept. One-off
+ * rules are scheduled as without it.
  */
 final readonly class ScheduleRemindersAction
 {
@@ -35,7 +38,7 @@ final readonly class ScheduleRemindersAction
     /**
      * @return list<NotificationReminder>
      */
-    public function execute(Model $subject, string $type, RecipientSpec $to): array
+    public function execute(Model $subject, string $type, RecipientSpec $to, bool $restart = false): array
     {
         $definition = $this->types->find($type);
         $type = $definition->key();     // a class-string is stored as its key
@@ -53,7 +56,7 @@ final readonly class ScheduleRemindersAction
             if ($rule->repeats()) {
                 $recipients = $this->resolve->execute($definition, $to, $subject, null);
                 $chains = NotificationModels::reminder()::query()->getConnection()
-                    ->transaction(static fn (): array => ReminderChains::start($subject, $definition, $rule, $recipients, $now));
+                    ->transaction(static fn (): array => ReminderChains::start($subject, $definition, $rule, $recipients, $now, $restart));
                 array_push($rows, ...$chains);
 
                 continue;

@@ -83,7 +83,10 @@ final class SubjectLifecycle
     {
         foreach ($types as $type) {
             foreach ($type->reminders() as $rule) {
-                if ($rule->attribute !== null && $subject->wasChanged($rule->attribute)) {
+                // A one-off rule's date, or the attribute a repeating rule is anchored to.
+                $attribute = $rule->attribute ?? $rule->anchorAttribute();
+
+                if ($attribute !== null && $subject->wasChanged($attribute)) {
                     return true;
                 }
             }

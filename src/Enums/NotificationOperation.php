@@ -28,6 +28,7 @@ enum NotificationOperation: string
     case ScheduleReminders = 'schedule_reminders';
     case Remind = 'remind';
     case CancelReminders = 'cancel_reminders';
+    case SnoozeReminders = 'snooze_reminders';
     case Acknowledge = 'acknowledge';
     case FireReminders = 'fire_reminders';
     case BackfillReminders = 'backfill_reminders';

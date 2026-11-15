@@ -26,6 +26,14 @@ final class InvalidReminderRuleException extends NotificationsException
     }
 
     /**
+     * A snooze that cannot apply: an instant not in the future, or a type without a repeating rule.
+     */
+    public static function invalidSnooze(string $type, string $reason): self
+    {
+        return self::make('invalid_reminder', 422, ['type' => $type, 'reason' => $reason], 'invalid_snooze');
+    }
+
+    /**
      * An escalation level whose `type:` is not registered, or cannot take the escalated subject.
      */
     public static function escalationType(string $type, string $escalation): self
