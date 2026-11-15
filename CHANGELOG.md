@@ -4,6 +4,37 @@ All notable changes to `notifications-for-laravel` are documented in this file. 
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## 1.4.0 - 2026-11-15
+
+### Added
+
+- `reminders()->schedule($type, $to, restart: true)` starts a repeating chain again for a recipient whose chain
+  already ended for the current anchor (acknowledged, `while()` false, cancelled, `times()` / `until()` reached). The
+  new chain counts from reminder #1 and starts at the anchor's next slot; an open chain is kept.
+- `reminders()->cancel($type, for: $recipient)` cancels only that recipient's repeating chain and the escalations it
+  armed. One-off reminders are left alone.
+- `reminders()->snooze($type, $recipient, until: $instant)` moves that recipient's next repeating reminder to
+  `$until`; later ones follow whole intervals after it, while everyone else keeps the original slots. `level`,
+  `times()` and armed escalations are untouched; past `until()` the chain ends. A recipient without an open chain is
+  left alone. Refused with `InvalidReminderRuleException::invalidSnooze()` (`invalid_snooze`, en + sk) when `$until`
+  is not in the future or the type has no repeating rule.
+- `SnoozeRemindersAction`, `NotificationOperation::SnoozeReminders`, `NotificationReminder::isSnoozed()` and the
+  `snoozed_until` column.
+- Fake: `assertRemindersSnoozed()`, `assertRemindersCancelled($subject, for:)` and
+  `assertReminderScheduled($subject, $type, restart:)`; `withReminders()` runs snooze for real.
+
+### Changed
+
+- `HasNotificationReminders` also syncs on save when only a repeating rule's `from()` attribute changed: a draft
+  published later starts the chains of a rule with `->to()`, and a republish re-arms chains that had all ended.
+- A snoozed chain whose anchor moves re-times to the new anchor and drops the snooze.
+
+### Upgrade
+
+- Publish and run the new migration, which adds a nullable `snoozed_until` column to `notification_reminders`:
+  `php artisan vendor:publish --tag=notifications-migrations` and `php artisan migrate`. It is additive; only
+  `snooze()` needs it.
+
 ## 1.3.0 - 2026-11-15
 
 ### Added
