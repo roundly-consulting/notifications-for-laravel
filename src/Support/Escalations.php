@@ -101,6 +101,10 @@ final class Escalations
             'recipients' => $stored,
             'data' => $root->data,
             'active_key' => Keys::escalation((string) self::scalar($root->getKey()), $index),
+            // A repeating chain's escalation belongs to the chain's recipient: their own
+            // acknowledgement cancels it, someone else's does not.
+            'recipient_type' => $root->recipient_type,
+            'recipient_id' => $root->recipient_id,
         ]);
     }
 

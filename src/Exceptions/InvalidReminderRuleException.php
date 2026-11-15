@@ -17,8 +17,14 @@ final class InvalidReminderRuleException extends NotificationsException
     }
 
     /**
-     * An escalation delay that is unreadable or not positive (it would escalate at once).
+     * A repeating rule (`Reminder::every()`) built wrong: an unreadable interval, a `times()`
+     * below one, a repeat-only setting on a one-off rule, or an escalation by count on one.
      */
+    public static function invalidRepeat(string $reason): self
+    {
+        return self::make('invalid_reminder', 422, ['reason' => $reason], 'invalid_repeat');
+    }
+
     /**
      * An escalation level whose `type:` is not registered, or cannot take the escalated subject.
      */
@@ -27,6 +33,9 @@ final class InvalidReminderRuleException extends NotificationsException
         return self::make('invalid_reminder', 422, ['type' => $type, 'escalation' => $escalation], 'invalid_escalation_type');
     }
 
+    /**
+     * An escalation delay that is unreadable or not positive (it would escalate at once).
+     */
     public static function invalidDelay(CarbonInterval|string $value): self
     {
         return self::make('invalid_reminder', 422, ['value' => $value instanceof CarbonInterval ? $value->spec() : $value], 'invalid_escalation_delay');

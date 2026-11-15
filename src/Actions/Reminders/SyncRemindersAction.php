@@ -21,6 +21,7 @@ use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\Keys;
 use RoundlyConsulting\Notifications\Support\ModelRefs;
 use RoundlyConsulting\Notifications\Support\NotificationModels;
+use RoundlyConsulting\Notifications\Support\ReminderChains;
 use RoundlyConsulting\Notifications\Support\ReminderRows;
 use RoundlyConsulting\Notifications\Support\TypeRegistry;
 
@@ -29,7 +30,8 @@ use RoundlyConsulting\Notifications\Support\TypeRegistry;
  * (moved, or cancelled when the new time has passed — skipped offsets never fire at once), rules
  * with recipients get their future offsets scheduled, sent reminders re-arm when the anchor moves
  * later (a renewal), and a cleared anchor cancels. Firing rows are left to the fire step, which
- * re-reads the anchor. A lost race is absorbed: sync never throws on a conflict.
+ * re-reads the anchor. A lost race is absorbed: sync never throws on a conflict. Repeating rules
+ * follow their anchor too (see ReminderChains::sync()).
  */
 final readonly class SyncRemindersAction
 {
@@ -95,6 +97,12 @@ final readonly class SyncRemindersAction
             ->get();
 
         foreach ($type->reminders() as $rule) {
+            if ($rule->repeats()) {
+                $changed += ReminderChains::sync($subject, $type, $rule, $now);
+
+                continue;
+            }
+
             if ($rule->attribute === null) {
                 continue;
             }

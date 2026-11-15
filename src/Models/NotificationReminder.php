@@ -46,6 +46,8 @@ use RoundlyConsulting\Notifications\Support\NotificationsConfig;
  * @property CarbonImmutable|null $acknowledged_at
  * @property string|null $acknowledger_type
  * @property int|string|null $acknowledger_id
+ * @property string|null $recipient_type
+ * @property int|string|null $recipient_id
  * @property CancelReason|null $cancel_reason
  * @property int $attempts
  * @property CarbonImmutable|null $created_at
@@ -53,6 +55,7 @@ use RoundlyConsulting\Notifications\Support\NotificationsConfig;
  * @property CarbonImmutable|null $deleted_at
  * @property-read Model|null $subject
  * @property-read Model|null $acknowledger
+ * @property-read Model|null $recipient
  * @property-read NotificationReminder|null $parent
  */
 class NotificationReminder extends Model
@@ -91,6 +94,25 @@ class NotificationReminder extends Model
     public function acknowledger(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * The recipient of a repeating reminder chain (and of the escalations it armed); null on
+     * one-off reminders.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function recipient(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Whether the row belongs to a repeating chain (`Reminder::every()`).
+     */
+    public function isRepeating(): bool
+    {
+        return $this->recipient_type !== null;
     }
 
     /**

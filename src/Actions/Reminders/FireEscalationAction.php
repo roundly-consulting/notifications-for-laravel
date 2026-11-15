@@ -10,10 +10,13 @@ use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Notifications\Actions\Sending\SendNotificationAction;
 use RoundlyConsulting\Notifications\DataTransferObjects\ReminderReference;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
+use RoundlyConsulting\Notifications\DataTransferObjects\SendResult;
 use RoundlyConsulting\Notifications\Enums\CancelReason;
+use RoundlyConsulting\Notifications\Enums\NotificationOperation;
 use RoundlyConsulting\Notifications\Enums\ReminderStatus;
 use RoundlyConsulting\Notifications\Events\EscalationFired;
 use RoundlyConsulting\Notifications\Models\NotificationReminder;
+use RoundlyConsulting\Notifications\NotificationsManager;
 use RoundlyConsulting\Notifications\Recipients;
 use RoundlyConsulting\Notifications\Recipients\RecipientSpec;
 use RoundlyConsulting\Notifications\Reminders\EscalationRule;
@@ -32,7 +35,8 @@ use Throwable;
 /**
  * Fires one due escalation level: unless the subject was acknowledged, its condition failed or it
  * is gone, notify the level's recipients (in their own lane, never folded into the original send)
- * and arm the next level.
+ * and arm the next level. A repeating rule's levels are each armed by the chain itself, so none
+ * arms the next. The send goes through the manager, so `Notifications::fake()` records it.
  *
  * @internal
  */
@@ -40,7 +44,6 @@ final readonly class FireEscalationAction
 {
     public function __construct(
         private TypeRegistry $types,
-        private SendNotificationAction $send,
     ) {}
 
     public function execute(int|string $id): bool
@@ -140,7 +143,7 @@ final readonly class FireEscalationAction
 
         $id = ModelRefs::key($row);
 
-        $this->send->execute(new SendNotificationData(
+        $data = new SendNotificationData(
             type: $escalationType,
             subject: $subject,
             recipients: $recipients,
@@ -149,9 +152,16 @@ final readonly class FireEscalationAction
             escalationLevel: $row->level,
             reminderId: $root === null ? $id : ModelRefs::key($root),
             reminder: new ReminderReference($id, $row->rule, $root?->offset, $row->due_at, $row->level),
-        ));
+        );
 
-        $next = $levels[$row->level] ?? null;
+        app(NotificationsManager::class)->perform(
+            NotificationOperation::Send,
+            SendNotificationAction::class,
+            static fn (SendNotificationAction $action): SendResult => $action->execute($data),
+            ['data' => $data],
+        );
+
+        $next = $rule?->repeats() === true ? null : ($levels[$row->level] ?? null);
 
         // One transaction: a send-level chain's next level takes over the chain key the fired
         // level releases, so a concurrent send cannot open a second chain in between.

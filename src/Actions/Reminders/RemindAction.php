@@ -42,6 +42,10 @@ final readonly class RemindAction
             throw InvalidNotificationSubjectException::wrongClass($type, class_basename($expected), class_basename($subject));
         }
 
+        if ($rule->repeats()) {
+            throw InvalidReminderRuleException::invalid($type, 'repeating reminders are type rules — declare Reminder::every() on the type and schedule() it');
+        }
+
         if ($rule->escalations() !== [] || $rule->condition() !== null || $rule->isAcknowledgedOnRead()) {
             throw InvalidReminderRuleException::invalid($type, 'ad-hoc reminders take no condition, escalation or acknowledgedOnRead — declare them on a type rule');
         }

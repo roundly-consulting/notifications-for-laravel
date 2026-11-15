@@ -16,7 +16,8 @@ use RoundlyConsulting\Notifications\Support\Clock;
 use RoundlyConsulting\Notifications\Support\Durations;
 
 /**
- * A reminder rule, built with `Reminder::before()` / `after()` / `at()` and the fluent methods.
+ * A reminder rule, built with `Reminder::before()` / `after()` / `at()` / `every()` and the fluent
+ * methods.
  */
 final class ReminderRule
 {
@@ -33,8 +34,19 @@ final class ReminderRule
 
     private bool $rearm = true;
 
+    /** Repeating rules only (`Reminder::every()`). */
+    private ?CarbonInterval $every = null;
+
+    private ?string $from = null;
+
+    private ?CarbonInterval $startingAfter = null;
+
+    private ?int $times = null;
+
+    private CarbonInterface|Closure|null $until = null;
+
     /**
-     * @param  'before'|'after'|'at'  $direction
+     * @param  'before'|'after'|'at'|'every'  $direction
      * @param  list<CarbonInterval|string>  $offsets
      */
     public function __construct(
@@ -43,6 +55,91 @@ final class ReminderRule
         public readonly array $offsets,
         public readonly ?CarbonInterface $at = null,
     ) {}
+
+    /**
+     * @internal build it with `Reminder::every()`
+     *
+     * @throws InvalidReminderRuleException
+     */
+    public static function repeating(CarbonInterval|string $interval): self
+    {
+        $rule = new self('every', null, []);
+        $rule->every = Durations::lenient($interval) ?? throw InvalidReminderRuleException::invalidRepeat(sprintf('the interval "%s" is not a positive duration such as P7D or "7 days"', self::describe($interval)));
+
+        return $rule;
+    }
+
+    /**
+     * Repeating rules: anchor the chain to a date attribute of the subject (default: when the
+     * chain was scheduled). A later anchor (a republished policy) re-arms ended chains; a moved
+     * one re-times the pending reminder.
+     *
+     * @throws InvalidReminderRuleException on a one-off rule
+     */
+    public function from(string $attribute): self
+    {
+        $this->repeatOnly('from');
+        $this->from = $attribute;
+
+        return $this;
+    }
+
+    /**
+     * Repeating rules: the first reminder goes out this long after the anchor (default: one
+     * interval). Zero sends the first one at the anchor.
+     *
+     * @throws InvalidReminderRuleException on a one-off rule or an unreadable / negative delay
+     */
+    public function startingAfter(CarbonInterval|string $delay): self
+    {
+        $this->repeatOnly('startingAfter');
+
+        try {
+            $interval = $delay instanceof CarbonInterval ? $delay : (Durations::iso($delay) ?? CarbonInterval::make($delay));
+        } catch (\Throwable) {
+            $interval = null;
+        }
+
+        if (! $interval instanceof CarbonInterval || Durations::seconds($interval) < 0) {
+            throw InvalidReminderRuleException::invalidRepeat(sprintf('the first delay "%s" is not a duration of zero or more', self::describe($delay)));
+        }
+
+        $this->startingAfter = $interval;
+
+        return $this;
+    }
+
+    /**
+     * Repeating rules: at most `$max` reminders per recipient.
+     *
+     * @throws InvalidReminderRuleException on a one-off rule or a max below one
+     */
+    public function times(int $max): self
+    {
+        $this->repeatOnly('times');
+
+        if ($max < 1) {
+            throw InvalidReminderRuleException::invalidRepeat('times() needs at least 1');
+        }
+
+        $this->times = $max;
+
+        return $this;
+    }
+
+    /**
+     * Repeating rules: no reminder due after this instant — or `fn (Model $subject): ?CarbonInterface`,
+     * read whenever the next reminder is scheduled (null: no end).
+     *
+     * @throws InvalidReminderRuleException on a one-off rule
+     */
+    public function until(CarbonInterface|Closure $end): self
+    {
+        $this->repeatOnly('until');
+        $this->until = $end;
+
+        return $this;
+    }
 
     /**
      * A stable rule key (default `{attribute}:{direction}`). Two rules on one attribute and
@@ -82,13 +179,33 @@ final class ReminderRule
      * An unreadable or non-positive delay throws here. Type rules only: an ad-hoc reminder
      * refuses a rule with an escalation.
      *
+     * On a repeating rule each level is armed once per recipient chain: a delay counts from the
+     * chain's first reminder; an int `$after` escalates after that many reminders went out
+     * unacknowledged — one interval after the last of them.
+     *
      * @param  RecipientSpec|Model|Closure|iterable<mixed>  $to
      *
      * @throws InvalidReminderRuleException
      */
-    public function escalate(CarbonInterval|string $after, RecipientSpec|Model|Closure|iterable $to, ?string $type = null): self
+    public function escalate(CarbonInterval|string|int $after, RecipientSpec|Model|Closure|iterable $to, ?string $type = null): self
     {
-        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? throw InvalidReminderRuleException::invalidDelay($after), $to instanceof Closure ? $to : Recipients::from($to), $type);
+        $to = $to instanceof Closure ? $to : Recipients::from($to);
+
+        if (is_int($after)) {
+            if ($this->every === null) {
+                throw InvalidReminderRuleException::invalidRepeat('escalating after a number of reminders needs Reminder::every()');
+            }
+
+            if ($after < 1) {
+                throw InvalidReminderRuleException::invalidRepeat('escalate() after a number of reminders needs at least 1');
+            }
+
+            $this->escalations[] = new EscalationRule($this->every, $to, $type, $after);
+
+            return $this;
+        }
+
+        $this->escalations[] = new EscalationRule(Durations::lenient($after) ?? throw InvalidReminderRuleException::invalidDelay($after), $to, $type);
 
         return $this;
     }
@@ -119,9 +236,109 @@ final class ReminderRule
             return $this->key;
         }
 
-        return $this->direction === 'at'
-            ? 'at:'.($this->at === null ? '-' : Clock::format($this->at))
-            : $this->attribute.':'.$this->direction;
+        return match ($this->direction) {
+            'at' => 'at:'.($this->at === null ? '-' : Clock::format($this->at)),
+            'every' => ($this->from ?? 'scheduled').':every',
+            default => $this->attribute.':'.$this->direction,
+        };
+    }
+
+    public function repeats(): bool
+    {
+        return $this->every !== null;
+    }
+
+    /**
+     * The repeat interval as ISO-8601 (`P7D`); null on a one-off rule.
+     */
+    public function interval(): ?string
+    {
+        return $this->every === null ? null : Durations::toIso($this->every);
+    }
+
+    /**
+     * The date attribute a repeating chain is anchored to; null when it is anchored to when it
+     * was scheduled.
+     */
+    public function anchorAttribute(): ?string
+    {
+        return $this->from;
+    }
+
+    public function maxTimes(): ?int
+    {
+        return $this->times;
+    }
+
+    /**
+     * The instant after which a repeating chain sends nothing more, for this subject.
+     */
+    public function endFor(Model $subject): ?CarbonImmutable
+    {
+        $end = $this->until instanceof Closure ? ($this->until)($subject) : $this->until;
+
+        return $end instanceof CarbonInterface ? Clock::utc($end) : null;
+    }
+
+    /**
+     * The first reminder of a repeating chain due strictly after `$after`: the anchor plus the
+     * first delay plus whole intervals, on the anchor's wall clock (see dueAt()). Slots are
+     * always counted from the anchor, so a late sweep never drifts the chain or sends a burst.
+     */
+    public function nextDue(CarbonImmutable $anchor, CarbonImmutable $after): CarbonImmutable
+    {
+        $first = self::dueAt($anchor, $this->slotOffset(0));
+
+        if ($first->greaterThan($after)) {
+            return $first;
+        }
+
+        $step = max(1, Durations::seconds($this->every ?? CarbonInterval::seconds(1)));
+        $k = max(1, intdiv($after->getTimestamp() - $first->getTimestamp(), $step));
+
+        while ($k > 1 && self::dueAt($anchor, $this->slotOffset($k - 1))->greaterThan($after)) {
+            $k--;
+        }
+
+        while (! ($due = self::dueAt($anchor, $this->slotOffset($k)))->greaterThan($after)) {
+            $k++;
+        }
+
+        return $due;
+    }
+
+    /**
+     * The anchor-relative offset of slot `$k`: the first delay plus `$k` intervals.
+     */
+    private function slotOffset(int $k): string
+    {
+        $start = $this->startingAfter ?? $this->every ?? CarbonInterval::seconds(0);
+        $every = $this->every ?? CarbonInterval::seconds(0);
+
+        return Durations::toIso(CarbonInterval::create(
+            $start->y + $k * $every->y,
+            $start->m + $k * $every->m,
+            0,
+            $start->d + $k * $every->d,
+            $start->h + $k * $every->h,
+            $start->i + $k * $every->i,
+            $start->s + $k * $every->s,
+        ));
+    }
+
+    /**
+     * @throws InvalidReminderRuleException
+     */
+    private function repeatOnly(string $method): void
+    {
+        if ($this->every === null) {
+            throw InvalidReminderRuleException::invalidRepeat($method.'() is for repeating rules (Reminder::every())');
+        }
+    }
+
+    private static function describe(CarbonInterval|string $value): string
+    {
+        return $value instanceof CarbonInterval ? $value->spec() : $value;
     }
 
     public function hasExplicitKey(): bool

@@ -16,7 +16,7 @@ use RoundlyConsulting\Testing\Assertions\Migrations\MigrationRunner;
 it('publishes its migrations instead of auto-loading them', function (): void {
     expect(NotificationsServiceProvider::class)
         ->toNotAutoLoadMigrations()
-        ->toPublishMigrationsTimestamped('notifications-migrations', 5);
+        ->toPublishMigrationsTimestamped('notifications-migrations', 6);
 });
 
 /**
@@ -35,13 +35,13 @@ it('runs its migrations in an order every foreign key can follow', function (): 
 
 it('applies on postgres and refuses a broken order there', function (): void {
     expect(__DIR__.'/../../database/migrations')
-        ->toApplyOnConnection('pgsql', 5)
+        ->toApplyOnConnection('pgsql', 6)
         ->toRejectBrokenOrderOnConnection(static fn (array $files): array => array_reverse($files), 'pgsql');
 })->skip(fn (): bool => ! MigrationRunner::connectionIsAvailable('pgsql'), 'no PostgreSQL connection');
 
 it('applies on mysql and refuses a broken order there', function (): void {
     expect(__DIR__.'/../../database/migrations')
-        ->toApplyOnConnection('mysql', 5)
+        ->toApplyOnConnection('mysql', 6)
         ->toRejectBrokenOrderOnConnection(static fn (array $files): array => array_reverse($files), 'mysql');
 })->skip(fn (): bool => ! MigrationRunner::connectionIsAvailable('mysql'), 'no MySQL connection');
 

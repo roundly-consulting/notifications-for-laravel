@@ -7,7 +7,9 @@ namespace RoundlyConsulting\Notifications\Testing;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert as PHPUnit;
+use RoundlyConsulting\Notifications\Actions\Reminders\FireDueRemindersAction;
 use RoundlyConsulting\Notifications\Actions\Sending\ResolveRecipientsAction;
+use RoundlyConsulting\Notifications\DataTransferObjects\FiredReminders;
 use RoundlyConsulting\Notifications\DataTransferObjects\PreferencesUpdate;
 use RoundlyConsulting\Notifications\DataTransferObjects\SendNotificationData;
 use RoundlyConsulting\Notifications\Enums\Channel;
@@ -25,6 +27,10 @@ use Throwable;
  * calls through the model traits — is recorded and NOT executed. Reads pass through to the real
  * store. `passthrough()` records and runs.
  *
+ * `withReminders()` runs the reminder bookkeeping for real (schedule, sync, cancel, acknowledge and
+ * the fire step write their rows) while the sends a reminder fires stay recorded — so a test can
+ * travel in time, `fireDueReminders()` and `assertReminded($user, $type, times: 2)`.
+ *
  * Recipient resolution still runs, so `assertSent(to: $user)` works with `Recipients::role()`.
  * Access checks, preferences, quiet hours and de-dup do not: an assertion proves the intent to
  * notify, not a delivery (use the real pipeline with `Notification::fake()` for that).
@@ -36,6 +42,19 @@ final class NotificationsFake extends NotificationsManager
 
     private bool $passthrough = false;
 
+    private bool $runsReminders = false;
+
+    /** The reminder operations `withReminders()` runs for real. */
+    private const array REMINDER_OPERATIONS = [
+        NotificationOperation::ScheduleReminders,
+        NotificationOperation::SyncReminders,
+        NotificationOperation::Remind,
+        NotificationOperation::CancelReminders,
+        NotificationOperation::Acknowledge,
+        NotificationOperation::FireReminders,
+        NotificationOperation::BackfillReminders,
+    ];
+
     /**
      * Record and also run every operation.
      */
@@ -44,6 +63,34 @@ final class NotificationsFake extends NotificationsManager
         $this->passthrough = $passthrough;
 
         return $this;
+    }
+
+    /**
+     * Record AND run the reminder operations (scheduling, syncing, cancelling, acknowledging,
+     * firing), so reminder rows exist and fire. The sends they fire are still only recorded
+     * (unless `passthrough()`), and count for `assertSent()` / `assertReminded()`.
+     */
+    public function withReminders(bool $on = true): self
+    {
+        $this->runsReminders = $on;
+
+        return $this;
+    }
+
+    /**
+     * Fire every due reminder and escalation now — the sweep's reminder step — whatever
+     * `withReminders()` says; the sends are recorded. Rows exist when they were scheduled under
+     * `withReminders()` (or `passthrough()`).
+     */
+    public function fireDueReminders(): FiredReminders
+    {
+        $this->recorded[] = $this->record(NotificationOperation::FireReminders, []);
+
+        return parent::perform(
+            NotificationOperation::FireReminders,
+            FireDueRemindersAction::class,
+            static fn (FireDueRemindersAction $action): FiredReminders => $action->execute(),
+        ) ?? new FiredReminders;
     }
 
     /**
@@ -67,7 +114,9 @@ final class NotificationsFake extends NotificationsManager
         $recorded = $this->record($operation, $context);     // may throw what the real send throws
         $this->recorded[] = $recorded;
 
-        return $this->passthrough ? parent::perform($operation, $action, $execute, $context) : null;
+        $runs = $this->passthrough || ($this->runsReminders && in_array($operation, self::REMINDER_OPERATIONS, true));
+
+        return $runs ? parent::perform($operation, $action, $execute, $context) : null;
     }
 
     /**
@@ -359,6 +408,50 @@ final class NotificationsFake extends NotificationsManager
         PHPUnit::assertNotEmpty($matching, 'Expected the subject to be acknowledged, but it was not.');
     }
 
+    /**
+     * A reminder of the type (not an escalation) was sent to the recipient — `$times` times, when
+     * given (e.g. a repeating reminder that fired twice before they acknowledged).
+     */
+    public function assertReminded(Model $recipient, string $type, ?int $times = null, ?Model $about = null): void
+    {
+        $type = $this->typeKey($type);
+        $matching = $this->reminderSends($type, $recipient, $about, escalations: false);
+
+        if ($times !== null) {
+            PHPUnit::assertCount($times, $matching, sprintf('Expected the recipient to be reminded of [%s] %d time(s), but they were reminded %d time(s).', $type, $times, count($matching)));
+
+            return;
+        }
+
+        PHPUnit::assertNotEmpty($matching, sprintf('Expected the recipient to be reminded of [%s], but they were not.', $type));
+    }
+
+    public function assertNotReminded(Model $recipient, string $type, ?Model $about = null): void
+    {
+        $type = $this->typeKey($type);
+        $matching = $this->reminderSends($type, $recipient, $about, escalations: false);
+
+        PHPUnit::assertEmpty($matching, sprintf('Expected the recipient not to be reminded of [%s], but they were reminded %d time(s).', $type, count($matching)));
+    }
+
+    /**
+     * An escalation was sent with the type (the escalated type, or the reminder's own) — to `$to`,
+     * and `$times` times, when given.
+     */
+    public function assertEscalated(string $type, ?Model $to = null, ?int $times = null, ?Model $about = null): void
+    {
+        $type = $this->typeKey($type);
+        $matching = $this->reminderSends($type, $to, $about, escalations: true);
+
+        if ($times !== null) {
+            PHPUnit::assertCount($times, $matching, sprintf('Expected [%s] to escalate %d time(s), but it escalated %d time(s).', $type, $times, count($matching)));
+
+            return;
+        }
+
+        PHPUnit::assertNotEmpty($matching, sprintf('Expected [%s] to escalate, but it did not.', $type));
+    }
+
     public function assertRevoked(Model $subject, ?Model $recipient = null): void
     {
         $matching = array_filter($this->recorded(NotificationOperation::Revoke), static fn (RecordedOperation $op): bool => $op->concerns($subject, 'subject')
@@ -445,6 +538,22 @@ final class NotificationsFake extends NotificationsManager
             }
 
             return false;
+        }));
+    }
+
+    /**
+     * Recorded sends a reminder (or, with `$escalations`, an escalation) fired.
+     *
+     * @return list<RecordedOperation>
+     */
+    private function reminderSends(string $type, ?Model $to, ?Model $about, bool $escalations): array
+    {
+        return array_values(array_filter($this->sends($type, $to, $about), static function (RecordedOperation $send) use ($escalations): bool {
+            $data = $send->context['data'] ?? null;
+
+            return $data instanceof SendNotificationData
+                && $data->reminder !== null
+                && ($data->escalationLevel > 0) === $escalations;
         }));
     }
 

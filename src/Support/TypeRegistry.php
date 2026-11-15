@@ -274,6 +274,24 @@ final class TypeRegistry
         $seen = [];
 
         foreach ($rules as $rule) {
+            if ($rule->repeats()) {
+                $attribute = $rule->anchorAttribute();
+
+                if ($attribute !== null && trim($attribute) === '') {
+                    throw InvalidReminderRuleException::invalid($key, 'the anchor attribute is empty');
+                }
+
+                $ruleKey = $rule->ruleKey();
+
+                if (strlen($ruleKey) > 100 || isset($seen[$ruleKey])) {
+                    throw InvalidReminderRuleException::invalid($key, 'rule keys must be unique per type (set ->key() on repeating rules sharing an anchor)');
+                }
+
+                $seen[$ruleKey] = true;
+
+                continue;
+            }
+
             if ($rule->direction === 'at') {
                 throw InvalidReminderRuleException::invalid($key, 'Reminder::at() is for ad-hoc schedules only');
             }
